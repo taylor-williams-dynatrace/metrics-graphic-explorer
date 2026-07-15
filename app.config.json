@@ -12,6 +12,14 @@
         "comment": "read metric data via DQL timeseries/metrics"
       },
       {
+        "name": "storage:events:read",
+        "comment": "read event data via DQL events"
+      },
+      {
+        "name": "storage:bizevents:read",
+        "comment": "read business event data via DQL bizevents"
+      },
+      {
         "name": "storage:logs:read",
         "comment": "read log data via DQL logs"
       },
