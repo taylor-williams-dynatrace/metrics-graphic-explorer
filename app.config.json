@@ -2,13 +2,39 @@
   "$schema": "./.dt-app/app.config.schema.json",
   "environmentUrl": "https://bop84216.apps.dynatrace.com/",
   "app": {
-    "name": "metrics-graphic-explorer",
-    "version": "0.0.0",
-    "description": "A starting project with routing, fetching data, and charting",
+    "name": "Metrics Canvas Explorer",
+    "version": "0.1.1",
+    "description": "Live Metrics Viewer",
     "id": "my.metrics.graphic.explorer",
     "scopes": [
-      { "name": "storage:logs:read", "comment": "default template" },
-      { "name": "storage:buckets:read", "comment": "default template" }
+      {
+        "name": "storage:metrics:read",
+        "comment": "read metric data via DQL timeseries/metrics"
+      },
+      {
+        "name": "storage:logs:read",
+        "comment": "read log data via DQL logs"
+      },
+      {
+        "name": "storage:spans:read",
+        "comment": "read span data via DQL spans"
+      },
+      {
+        "name": "storage:buckets:read",
+        "comment": "required alongside metrics read"
+      },
+      {
+        "name": "document:documents:read",
+        "comment": "read saved views and background images"
+      },
+      {
+        "name": "document:documents:write",
+        "comment": "create and update saved views and backgrounds"
+      },
+      {
+        "name": "document:documents:delete",
+        "comment": "delete saved views and backgrounds"
+      }
     ]
   }
 }
