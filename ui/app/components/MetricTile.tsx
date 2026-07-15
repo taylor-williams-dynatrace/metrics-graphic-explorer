@@ -3,7 +3,7 @@ import { useDql } from "@dynatrace-sdk/react-hooks";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
-import { ProgressCircle } from "@dynatrace/strato-components/content";
+import { ProgressCircle, Markdown } from "@dynatrace/strato-components/content";
 import {
   DeleteIcon,
   EditIcon,
@@ -57,8 +57,10 @@ export const MetricTile: React.FC<MetricTileProps> = ({
   onEdit,
   onDuplicate,
 }) => {
-  const isDql = (tile.source ?? "metric") === "dql";
-  const query = isDql ? tile.dql ?? "" : tileValueQuery(tile);
+  const source = tile.source ?? "metric";
+  const isDql = source === "dql";
+  const isMarkdown = source === "markdown";
+  const query = isMarkdown ? "" : isDql ? tile.dql ?? "" : tileValueQuery(tile);
   const hasSource = isDql ? Boolean(tile.dql) : Boolean(tile.metricKey);
 
   // In shape-only mode with no thresholds, the value isn't needed at all, so
@@ -70,7 +72,7 @@ export const MetricTile: React.FC<MetricTileProps> = ({
     { query },
     {
       refetchInterval: refreshIntervalMs,
-      enabled: hasSource && needsValue && query.length > 0,
+      enabled: !isMarkdown && hasSource && needsValue && query.length > 0,
     },
   );
 
@@ -315,7 +317,22 @@ export const MetricTile: React.FC<MetricTileProps> = ({
         </Flex>
       )}
 
-      {!tile.shapeOnly && (
+      {isMarkdown ? (
+        <div
+          style={{
+            position: "relative",
+            zIndex: 1,
+            flexGrow: 1,
+            minHeight: 0,
+            width: "100%",
+            boxSizing: "border-box",
+            padding: 8,
+            overflow: "auto",
+          }}
+        >
+          <Markdown>{tile.markdown ?? ""}</Markdown>
+        </div>
+      ) : !tile.shapeOnly ? (
       <Flex
         flexDirection="column"
         justifyContent="center"
@@ -368,7 +385,7 @@ export const MetricTile: React.FC<MetricTileProps> = ({
           </Text>
         )}
       </Flex>
-      )}
+      ) : null}
 
       {editable && (
         <div

@@ -1,15 +1,16 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useDql } from "@dynatrace-sdk/react-hooks";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Heading, Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { ProgressCircle } from "@dynatrace/strato-components/content";
+import { DotMenuIcon } from "@dynatrace/strato-icons";
 import Colors from "@dynatrace/strato-design-tokens/colors";
 import { METRIC_KEYS_QUERY } from "../services/metricsQuery";
 import { TileConfigForm, type TileConfig } from "./TileConfigForm";
 import { NativeInput } from "./NativeField";
 
-type AddMode = "metric" | "dql";
+type AddMode = "metric" | "dql" | "markdown";
 
 interface MetricExplorerProps {
   /** Called with a finished tile configuration to place on the canvas. */
@@ -19,6 +20,9 @@ interface MetricExplorerProps {
 }
 
 const MAX_VISIBLE = 250;
+const DEFAULT_WIDTH = 510;
+const MIN_WIDTH = 320;
+const MAX_WIDTH = 820;
 
 /**
  * Right-side panel listing all available Dynatrace metrics (searchable). After
@@ -33,6 +37,36 @@ export const MetricExplorer: React.FC<MetricExplorerProps> = ({
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [dqlResetKey, setDqlResetKey] = useState(0);
+
+  const [width, setWidth] = useState(DEFAULT_WIDTH);
+  const [handleHover, setHandleHover] = useState(false);
+  const resizeRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+
+  function onResizeDown(e: React.PointerEvent) {
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    resizeRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startWidth: width,
+    };
+  }
+
+  function onResizeMove(e: React.PointerEvent) {
+    const s = resizeRef.current;
+    if (!s || s.pointerId !== e.pointerId) return;
+    // The panel sits on the right, so dragging left (smaller clientX) widens it.
+    const next = s.startWidth + (s.startX - e.clientX);
+    setWidth(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, next)));
+  }
+
+  function onResizeUp(e: React.PointerEvent) {
+    if (resizeRef.current?.pointerId === e.pointerId) resizeRef.current = null;
+  }
 
   const { data, error, isLoading } = useDql(
     { query: METRIC_KEYS_QUERY },
@@ -60,7 +94,8 @@ export const MetricExplorer: React.FC<MetricExplorerProps> = ({
       flexDirection="column"
       gap={12}
       style={{
-        width: 510,
+        position: "relative",
+        width,
         flexShrink: 0,
         height: "100%",
         padding: 16,
@@ -70,26 +105,87 @@ export const MetricExplorer: React.FC<MetricExplorerProps> = ({
         overflowY: "auto",
       }}
     >
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize panel"
+        onPointerDown={onResizeDown}
+        onPointerMove={onResizeMove}
+        onPointerUp={onResizeUp}
+        onPointerCancel={onResizeUp}
+        onMouseEnter={() => setHandleHover(true)}
+        onMouseLeave={() => setHandleHover(false)}
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 8,
+          cursor: "col-resize",
+          zIndex: 3,
+          userSelect: "none",
+          touchAction: "none",
+          background: handleHover
+            ? Colors.Border.Primary.Default
+            : "transparent",
+          transition: "background 120ms",
+        }}
+      >
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 16,
+            height: 30,
+            borderRadius: 8,
+            background: Colors.Background.Surface.Default,
+            border: `1px solid ${
+              handleHover
+                ? Colors.Border.Primary.Default
+                : Colors.Border.Neutral.Default
+            }`,
+            color: handleHover
+              ? Colors.Text.Primary.Default
+              : Colors.Text.Neutral.Subdued,
+          }}
+        >
+          <DotMenuIcon />
+        </div>
+      </div>
+
       <Heading level={5}>Add a tile</Heading>
 
-      <Flex gap={6}>
+      <Flex gap={6} style={{ flexWrap: "wrap" }}>
         <Button
           variant={addMode === "metric" ? "accent" : "default"}
           onClick={() => setAddMode("metric")}
           style={{ flex: 1 }}
         >
-          Use existing metric
+          Metric
         </Button>
         <Button
           variant={addMode === "dql" ? "accent" : "default"}
           onClick={() => setAddMode("dql")}
           style={{ flex: 1 }}
         >
-          Create via DQL
+          DQL
+        </Button>
+        <Button
+          variant={addMode === "markdown" ? "accent" : "default"}
+          onClick={() => setAddMode("markdown")}
+          style={{ flex: 1 }}
+        >
+          Markdown
         </Button>
       </Flex>
 
-      {addMode === "dql" ? (
+      {addMode === "dql" || addMode === "markdown" ? (
         <div
           style={{
             borderTop: `1px solid ${Colors.Border.Neutral.Default}`,
@@ -97,8 +193,8 @@ export const MetricExplorer: React.FC<MetricExplorerProps> = ({
           }}
         >
           <TileConfigForm
-            key={`dql-${dqlResetKey}`}
-            source="dql"
+            key={`${addMode}-${dqlResetKey}`}
+            source={addMode}
             currentViewId={currentViewId}
             submitLabel="Add to canvas"
             onSubmit={(config) => {

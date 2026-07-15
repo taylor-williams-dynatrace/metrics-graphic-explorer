@@ -1,11 +1,12 @@
 {
   "$schema": "./.dt-app/app.config.schema.json",
-  "environmentUrl": "https://bop84216.apps.dynatrace.com/",
+  "environmentUrl": "https://<env_id>.apps.dynatrace.com/",
   "app": {
     "name": "Metrics Canvas Explorer",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "description": "Live Metrics Viewer",
     "id": "my.metrics.graphic.explorer",
+    "icon": "ui/assets/app-icon.svg",
     "scopes": [
       {
         "name": "storage:metrics:read",

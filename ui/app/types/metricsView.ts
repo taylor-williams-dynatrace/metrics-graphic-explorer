@@ -155,10 +155,10 @@ export interface TileLink {
 }
 
 /**
- * How a tile's value is produced: from an existing platform metric (with
- * aggregation / window / filters) or from a user-supplied custom DQL query.
+ * What a tile displays: an existing platform metric (with aggregation / window
+ * / filters), a user-supplied custom DQL query, or static markdown text.
  */
-export type TileSource = "metric" | "dql";
+export type TileSource = "metric" | "dql" | "markdown";
 
 /** A metric value tile positioned on top of the background image. */
 export interface MetricTile {
@@ -172,6 +172,8 @@ export interface MetricTile {
   aggregation?: AggregationType;
   /** Custom DQL query returning a single value. Used when source is "dql". */
   dql?: string;
+  /** Markdown text content. Used when source is "markdown". */
+  markdown?: string;
   /** Visual shape of the tile (defaults to rectangle). */
   shape?: TileShape;
   /** When true, hide the value/label and show only the shape + threshold color. */

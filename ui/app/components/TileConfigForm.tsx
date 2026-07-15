@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useDql } from "@dynatrace-sdk/react-hooks";
+import { useCurrentTheme } from "@dynatrace/strato-components/core";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { RunQueryButton, type QueryStateType } from "@dynatrace/strato-components-preview/buttons";
-import { DQLEditor } from "@dynatrace/strato-components-preview/editors";
+import { CodeEditor, DQLEditor } from "@dynatrace/strato-components-preview/editors";
 import { PlusIcon } from "@dynatrace/strato-icons";
 import Colors from "@dynatrace/strato-design-tokens/colors";
 import type { DocumentMetaData } from "@dynatrace-sdk/client-document";
@@ -43,6 +44,7 @@ export interface TileConfig {
   aggregation?: AggregationType;
   lookback?: LookbackWindow;
   dql?: string;
+  markdown?: string;
   shape: TileShape;
   shapeOnly: boolean;
   filters: TileFilter[];
@@ -74,8 +76,9 @@ const fieldLabelStyle: React.CSSProperties = {
   color: Colors.Text.Neutral.Default,
 };
 
-/** Color of the shape picker glyphs and captions. */
-const SHAPE_PICKER_COLOR = "#3b3fbe";
+/** Color of the shape picker glyphs and captions (light / dark mode). */
+const SHAPE_PICKER_COLOR_LIGHT = "#3b3fbe";
+const SHAPE_PICKER_COLOR_DARK = "#b8bbff";
 
 /** Compact captions for the shape picker buttons. */
 const SHORT_SHAPE_LABELS: Record<TileShape, string> = {
@@ -107,6 +110,11 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
   onCancel,
 }) => {
   const isDql = source === "dql";
+  const isMarkdown = source === "markdown";
+  const shapePickerColor =
+    useCurrentTheme() === "dark"
+      ? SHAPE_PICKER_COLOR_DARK
+      : SHAPE_PICKER_COLOR_LIGHT;
   const [aggregation, setAggregation] = useState<AggregationType>(
     initial?.aggregation ?? "avg",
   );
@@ -114,6 +122,7 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
     initial?.lookback ?? DEFAULT_LOOKBACK,
   );
   const [dql, setDql] = useState<string>(initial?.dql ?? "");
+  const [markdown, setMarkdown] = useState<string>(initial?.markdown ?? "");
   const [test, setTest] = useState<TestState>({ status: "idle", message: "" });
   const [shape, setShape] = useState<TileShape>(
     initial?.shape ?? DEFAULT_TILE_SHAPE,
@@ -238,23 +247,32 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
     return undefined;
   }
 
-  const canSubmit = isDql ? test.status === "ok" : Boolean(metricKey);
+  const isMetric = source === "metric";
+  const canSubmit = isMarkdown
+    ? markdown.trim().length > 0
+    : isDql
+      ? test.status === "ok"
+      : Boolean(metricKey);
 
   function handleSubmit() {
     onSubmit({
       source,
-      metricKey: isDql ? undefined : metricKey,
-      aggregation: isDql ? undefined : aggregation,
-      lookback: isDql ? undefined : lookback,
+      metricKey: isMetric ? metricKey : undefined,
+      aggregation: isMetric ? aggregation : undefined,
+      lookback: isMetric ? lookback : undefined,
       dql: isDql ? dql.trim() : undefined,
-      shape,
-      shapeOnly,
-      filters: isDql
+      markdown: isMarkdown ? markdown : undefined,
+      // Markdown tiles are a plain text box, not a shape.
+      shape: isMarkdown ? DEFAULT_TILE_SHAPE : shape,
+      shapeOnly: isMarkdown ? false : shapeOnly,
+      filters: isMetric
+        ? filters.filter((f) => f.dimension && f.value !== "")
+        : [],
+      thresholds: isMarkdown
         ? []
-        : filters.filter((f) => f.dimension && f.value !== ""),
-      thresholds: thresholds.filter((t) => Number.isFinite(t.value)),
-      label: label.trim() || undefined,
-      unit: unit.trim() || undefined,
+        : thresholds.filter((t) => Number.isFinite(t.value)),
+      label: isMarkdown ? undefined : label.trim() || undefined,
+      unit: isMarkdown ? undefined : unit.trim() || undefined,
       link: resolveLink(),
     });
   }
@@ -270,7 +288,28 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
 
   return (
     <Flex flexDirection="column" gap={12} style={{ width: "100%" }}>
-      {isDql ? (
+      {isMarkdown ? (
+        <Flex flexDirection="column" gap={6}>
+          <Text style={fieldLabelStyle}>Markdown content</Text>
+          <CodeEditor
+            language="md"
+            value={markdown}
+            lineWrap
+            placeholder={"## Title\n\nSome **bold** text, a [link](https://…), or notes."}
+            aria-label="Markdown content"
+            onChange={(v) => setMarkdown(v)}
+          />
+          <Text
+            style={{
+              fontSize: 11,
+              fontWeight: 500,
+              color: Colors.Text.Neutral.Default,
+            }}
+          >
+            Supports standard markdown (headings, bold, lists, links, etc.).
+          </Text>
+        </Flex>
+      ) : isDql ? (
         <Flex flexDirection="column" gap={6}>
           <Text style={fieldLabelStyle}>Custom DQL query</Text>
           <DQLEditor
@@ -371,6 +410,7 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
         </>
       )}
 
+      {!isMarkdown && (
       <Flex flexDirection="column" gap={6}>
         <Text style={fieldLabelStyle}>Tile shape</Text>
         <Flex gap={6} style={{ flexWrap: "wrap" }}>
@@ -400,7 +440,7 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
                   background: selected
                     ? Colors.Background.Container.Neutral.Emphasized
                     : Colors.Background.Surface.Default,
-                  color: SHAPE_PICKER_COLOR,
+                  color: shapePickerColor,
                 }}
               >
                 <ShapeGlyph shape={s.value} size={24} />
@@ -430,50 +470,55 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
           Show shape only (hide value &amp; label)
         </label>
       </Flex>
+      )}
 
-      <Flex flexDirection="column" gap={6}>
-        <Flex justifyContent="space-between" alignItems="center">
-          <Text style={fieldLabelStyle}>Color thresholds</Text>
-          <Button variant="default" onClick={addThreshold}>
-            <Button.Prefix>
-              <PlusIcon />
-            </Button.Prefix>
-            Add threshold
-          </Button>
-        </Flex>
-        {thresholds.length === 0 ? (
-          <Text
-            style={{
-              fontSize: 12,
-              fontWeight: 500,
-              color: Colors.Text.Neutral.Default,
-            }}
-          >
-            No thresholds — the tile uses its default colors.
-          </Text>
-        ) : (
-          <>
+      {!isMarkdown && (
+        <Flex flexDirection="column" gap={6}>
+          <Flex justifyContent="space-between" alignItems="center">
+            <Text style={fieldLabelStyle}>Color thresholds</Text>
+            <Button variant="default" onClick={addThreshold}>
+              <Button.Prefix>
+                <PlusIcon />
+              </Button.Prefix>
+              Add threshold
+            </Button>
+          </Flex>
+          {thresholds.length === 0 ? (
             <Text
               style={{
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: 500,
                 color: Colors.Text.Neutral.Default,
               }}
             >
-              Evaluated top to bottom; the first matching rule colors the tile.
+              No thresholds — the tile uses its default colors.
             </Text>
-            {thresholds.map((threshold, i) => (
-              <ThresholdRow
-                key={threshold.id}
-                threshold={threshold}
-                onChange={(next) => updateThreshold(i, next)}
-                onRemove={() => removeThreshold(i)}
-              />
-            ))}
-          </>
-        )}
-      </Flex>
+          ) : (
+            <>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: 500,
+                  color: Colors.Text.Neutral.Default,
+                }}
+              >
+                Evaluated top to bottom; the first matching rule colors the
+                tile.
+              </Text>
+              {thresholds.map((threshold, i) => (
+                <ThresholdRow
+                  key={threshold.id}
+                  threshold={threshold}
+                  onChange={(next) => updateThreshold(i, next)}
+                  onRemove={() => removeThreshold(i)}
+                />
+              ))}
+            </>
+          )}
+        </Flex>
+      )}
 
+      {!isMarkdown && (
       <Flex gap={8}>
         <Flex flexDirection="column" gap={4} style={{ flex: 1 }}>
           <Text style={fieldLabelStyle}>Label (optional)</Text>
@@ -492,6 +537,7 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
           />
         </Flex>
       </Flex>
+      )}
 
       <Flex flexDirection="column" gap={4}>
         <Text style={fieldLabelStyle}>Hyperlink (optional)</Text>

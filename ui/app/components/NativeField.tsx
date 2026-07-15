@@ -34,3 +34,22 @@ type NativeInputProps = React.InputHTMLAttributes<HTMLInputElement>;
 export const NativeInput: React.FC<NativeInputProps> = ({ style, ...rest }) => (
   <input style={{ ...baseFieldStyle, ...style }} {...rest} />
 );
+
+type NativeTextAreaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement>;
+
+export const NativeTextArea: React.FC<NativeTextAreaProps> = ({
+  style,
+  ...rest
+}) => (
+  <textarea
+    style={{
+      ...baseFieldStyle,
+      fontWeight: 400,
+      resize: "vertical",
+      minHeight: 96,
+      lineHeight: 1.5,
+      ...style,
+    }}
+    {...rest}
+  />
+);
