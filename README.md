@@ -1,7 +1,7 @@
 # Metrics Canvas Explorer
 
-A Dynatrace App that mimics Splunk ITSI Glass Tables: create a saved
-**Metrics Graphical View**, choose a static background image (or a blank
+A Dynatrace App that allows you to create a saved
+**Metrics Canvas View**, choose a static background image (or a blank
 canvas), then place live metric value tiles anywhere on top of it. Finished
 views run in a read-only **View mode** that auto-refreshes every 30 seconds.
 
