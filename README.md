@@ -13,17 +13,30 @@ It uses React + TypeScript with the Strato Design System.
   `metrics-graphic-view`). Create a view by giving it a name and either
   uploading a background image or starting with a blank canvas.
 - **Editor / workshop mode (`/view/:id?mode=edit`)** — the background fills the
-  canvas; the **Metrics explorer** on the right lists every metric available in
-  the environment (discovered via the DQL `metrics` command). Pick a metric,
-  choose an aggregation (avg / sum / min / max / count), an aggregation window
-  (5 min / 15 min / 1 hour), optional dimension filters, and optional color
-  thresholds, then add it as a tile. Tiles can be dragged, freely resized into
-  rectangles, duplicated, and edited. You can rename the view, change the
-  background, and zoom the canvas (buttons or Ctrl/⌘-scroll).
+  canvas; the **Add a tile** panel on the right lets you create a tile from one
+  of two sources:
+  - **Use existing metric** — the metrics explorer lists every metric available
+    in the environment (discovered via the DQL `metrics` command). Pick a
+    metric, choose an aggregation (avg / sum / min / max / count), an
+    aggregation window (5 min / 15 min / 1 hour), and optional dimension
+    filters.
+  - **Create via DQL** — write a custom DQL query in an editor and test it. A
+    validator at the test step requires the query to return exactly one value
+    (a single numeric or text value — no tables, series, or multiple fields)
+    before the tile can be added. Aggregation, aggregation window, and filters
+    don't apply to this source and are hidden.
+
+  Both sources share the rest of the tile options: shape, "show shape only",
+  color thresholds, label, unit, and an optional drill-down hyperlink. Tiles can
+  be dragged, freely resized into rectangles, duplicated, and edited. You can
+  rename the view, change the background, and zoom the canvas (buttons or
+  Ctrl/⌘-scroll).
 - **View mode (`/view/:id`)** — the editor chrome disappears and each tile's
-  value refreshes every 30 s via a scalar `timeseries` query
-  (`<agg>(metric, scalar:true)`). Tiles recolor themselves based on their
-  thresholds. Click **Edit** to return to the workshop (owner only).
+  value refreshes every 30 s. Metric tiles run a scalar `timeseries` query
+  (`<agg>(metric, scalar:true)`); DQL tiles run the user's query and read its
+  single value (numeric or text). Tiles recolor themselves based on their
+  thresholds (numeric values only). Click **Edit** to return to the workshop
+  (owner only).
 
 ### Storage & data
 
@@ -35,17 +48,21 @@ It uses React + TypeScript with the Strato Design System.
   legacy `backgroundDocId` pointing at a separate image document is still read as
   a fallback for older views; re-saving migrates them.) Uploads are capped at
   8 MB.
-- Metric values are read live from Grail with DQL — no values are persisted.
+- Each tile stores its value source: a metric tile keeps `metricKey`,
+  `aggregation`, `lookback`, and `filters`; a DQL tile keeps its custom `dql`
+  query string instead. Tile values themselves are always read live from Grail —
+  no values are persisted.
 
 ### Source layout
 
 - `ui/app/types/metricsView.ts` — data model and constants.
 - `ui/app/services/documentService.ts` — Document Service CRUD, publishing, and
   image-to-data-URL embedding.
-- `ui/app/services/metricsQuery.ts` — DQL builders, threshold evaluation, and
-  value formatting.
+- `ui/app/services/metricsQuery.ts` — DQL builders, DQL single-value
+  extraction/validation, threshold evaluation, and value formatting.
 - `ui/app/components/` — `GlassCanvas`, `MetricTile`, `MetricExplorer`,
-  `TileConfigForm`, `FilterRow`, `ThresholdRow`, `CreateViewModal`, `NativeField`.
+  `TileConfigForm`, `FilterRow`, `ThresholdRow`, `TileShapeLayer`,
+  `CreateViewModal`, `NativeField`, `SelectField`, `MultiSelectField`.
 - `ui/app/pages/` — `ViewLibrary`, `ViewPage`.
 
 See [`docs/architecture.md`](docs/architecture.md) for a deeper walkthrough.

@@ -3,7 +3,7 @@
   "environmentUrl": "https://bop84216.apps.dynatrace.com/",
   "app": {
     "name": "Metrics Canvas Explorer",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "description": "Live Metrics Viewer",
     "id": "my.metrics.graphic.explorer",
     "scopes": [

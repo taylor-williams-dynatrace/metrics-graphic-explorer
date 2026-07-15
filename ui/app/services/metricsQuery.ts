@@ -150,7 +150,11 @@ export function readDqlCell(
   let value: number | string | null;
   if (raw == null) value = null;
   else if (typeof raw === "number") value = raw;
-  else value = String(raw);
+  else if (typeof raw === "string") value = raw;
+  else if (typeof raw === "boolean" || typeof raw === "bigint")
+    value = String(raw);
+  // Objects / records aren't a single displayable value.
+  else value = null;
   return { value, rows, dataFields, isSeries };
 }
 

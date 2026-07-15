@@ -172,9 +172,7 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
     setTest({ status: "running", message: "Running query…" });
     try {
       const result = await dqlTest.refetch();
-      const cell = readDqlCell(
-        result.data?.records as Array<Record<string, unknown>> | undefined,
-      );
+      const cell = readDqlCell(result.data?.records);
       const validation = validateDqlResult(cell);
       setTest({
         status: validation.ok ? "ok" : "error",

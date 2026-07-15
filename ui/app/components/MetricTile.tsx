@@ -201,7 +201,9 @@ export const MetricTile: React.FC<MetricTileProps> = ({
       resizeState.current = null;
   }
 
-  const label = tile.label || tile.metricKey || (isDql ? "Custom DQL" : "");
+  // Only show a label the user explicitly entered — never the metric key or a
+  // placeholder fallback.
+  const label = tile.label?.trim() ?? "";
 
   return (
     <div
@@ -347,22 +349,24 @@ export const MetricTile: React.FC<MetricTileProps> = ({
             {displayValue}
           </Text>
         )}
-        <Text
-          style={{
-            textAlign: "center",
-            fontSize: 11,
-            color: contentTextColor ?? Colors.Text.Neutral.Default,
-            textShadow: contentTextShadow,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            wordBreak: "break-word",
-          }}
-        >
-          {label}
-        </Text>
+        {label && (
+          <Text
+            style={{
+              textAlign: "center",
+              fontSize: 11,
+              color: contentTextColor ?? Colors.Text.Neutral.Default,
+              textShadow: contentTextShadow,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              wordBreak: "break-word",
+            }}
+          >
+            {label}
+          </Text>
+        )}
       </Flex>
       )}
 
