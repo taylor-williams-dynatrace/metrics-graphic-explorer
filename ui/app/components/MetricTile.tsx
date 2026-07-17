@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { useDql } from "@dynatrace-sdk/react-hooks";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
@@ -34,6 +34,8 @@ interface MetricTileProps {
   tile: MetricTileModel;
   /** Editing enabled (drag / resize / remove / reconfigure). */
   editable: boolean;
+  /** Whether this tile is part of the current selection. */
+  selected?: boolean;
   /** Auto-refresh interval in ms for the value query. */
   refreshIntervalMs: number;
   /** Pixel bounds of the canvas, used to clamp dragging. */
@@ -44,11 +46,35 @@ interface MetricTileProps {
   onRemove: (id: string) => void;
   onEdit: (tile: MetricTileModel) => void;
   onDuplicate: (tile: MetricTileModel) => void;
+  /** Snap a proposed position against other tiles; also drives alignment guides. */
+  onSnap?: (
+    id: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ) => { x: number; y: number };
+  /** Called when a drag/resize gesture ends, to clear alignment guides. */
+  onGestureEnd?: () => void;
+  /**
+   * Called on drag-handle pointer down for selection. Returns true if the
+   * canvas took over the gesture (group move or a selection toggle), meaning
+   * the tile should not start its own single-tile drag.
+   */
+  onHeaderPointerDown?: (
+    id: string,
+    additive: boolean,
+    clientX: number,
+    clientY: number,
+  ) => boolean;
+  /** Reports whether this tile's value query is currently running. */
+  onLoadingChange?: (id: string, loading: boolean) => void;
 }
 
 export const MetricTile: React.FC<MetricTileProps> = ({
   tile,
   editable,
+  selected,
   refreshIntervalMs,
   bounds,
   scale,
@@ -56,19 +82,25 @@ export const MetricTile: React.FC<MetricTileProps> = ({
   onRemove,
   onEdit,
   onDuplicate,
+  onSnap,
+  onGestureEnd,
+  onHeaderPointerDown,
+  onLoadingChange,
 }) => {
   const source = tile.source ?? "metric";
   const isDql = source === "dql";
   const isMarkdown = source === "markdown";
+  const transparent = tile.transparent ?? false;
+  // Shape-only makes no sense with no shape, so transparent overrides it.
+  const shapeOnly = (tile.shapeOnly ?? false) && !transparent;
   const query = isMarkdown ? "" : isDql ? tile.dql ?? "" : tileValueQuery(tile);
   const hasSource = isDql ? Boolean(tile.dql) : Boolean(tile.metricKey);
 
   // In shape-only mode with no thresholds, the value isn't needed at all, so
   // skip the query entirely; otherwise we still need it to drive the color.
-  const needsValue =
-    !tile.shapeOnly || (tile.thresholds?.length ?? 0) > 0;
+  const needsValue = !shapeOnly || (tile.thresholds?.length ?? 0) > 0;
 
-  const { data, error, isLoading } = useDql(
+  const { data, error, isLoading, isFetching } = useDql(
     { query },
     {
       refetchInterval: refreshIntervalMs,
@@ -76,13 +108,33 @@ export const MetricTile: React.FC<MetricTileProps> = ({
     },
   );
 
+  // Report query activity to the canvas. Use `isFetching` (not `isLoading`) so
+  // the indicator also reflects the periodic background refreshes — `isLoading`
+  // is only true on the very first load before any data exists.
+  useEffect(() => {
+    onLoadingChange?.(tile.id, isFetching);
+    return () => onLoadingChange?.(tile.id, false);
+  }, [isFetching, tile.id, onLoadingChange]);
+
   // Metric tiles read the aliased `val`; DQL tiles read the single cell (which
   // may be numeric or text). Thresholds only apply to numeric values.
   let numericValue: number | null;
   let displayValue: string;
   if (isDql) {
     const cell = readDqlCell(data?.records);
-    numericValue = typeof cell.value === "number" ? cell.value : null;
+    // A DQL value can come back as a numeric string (e.g. "0"); coerce it so
+    // color thresholds still apply. Non-numeric text stays null (no thresholds).
+    if (typeof cell.value === "number") {
+      numericValue = cell.value;
+    } else if (
+      typeof cell.value === "string" &&
+      cell.value.trim() !== "" &&
+      Number.isFinite(Number(cell.value))
+    ) {
+      numericValue = Number(cell.value);
+    } else {
+      numericValue = null;
+    }
     displayValue =
       cell.value == null
         ? "–"
@@ -97,20 +149,28 @@ export const MetricTile: React.FC<MetricTileProps> = ({
   }
 
   const thresholdColor = evaluateThresholdColor(numericValue, tile.thresholds);
-  const valueTextColor = thresholdColor
-    ? contrastTextColor(thresholdColor)
+  // A matching threshold overrides the tile's resting fill (static color, or the
+  // default surface). `effectiveFill` is the explicit hex fill, if any.
+  const staticBg = tile.backgroundColor;
+  const effectiveFill = thresholdColor ?? staticBg ?? null;
+  const valueTextColor = effectiveFill
+    ? contrastTextColor(effectiveFill)
     : undefined;
 
   const shape = tile.shape ?? "rectangle";
   const outlineShape = isOutlineTileShape(shape);
+  // Outline icons and transparent tiles have no solid backdrop behind the text.
+  const noFill = transparent || outlineShape;
 
-  // Outline (icon) shapes have a mostly-transparent interior, so text uses the
-  // neutral color with a surface-colored halo (readable in light and dark, and
-  // over busy backgrounds) rather than the solid-fill contrast color.
-  const contentTextColor = outlineShape
-    ? Colors.Text.Neutral.Default
-    : valueTextColor;
-  const contentTextShadow = outlineShape
+  // With no solid fill, text uses a readable color + surface-colored halo
+  // (works in light/dark and over busy backgrounds). Transparent tiles color
+  // the text by the threshold so status still reads; solid tiles fill instead.
+  const contentTextColor = transparent
+    ? thresholdColor ?? Colors.Text.Neutral.Default
+    : outlineShape
+      ? Colors.Text.Neutral.Default
+      : valueTextColor;
+  const contentTextShadow = noFill
     ? `0 0 3px ${Colors.Background.Surface.Default}, 0 0 2px ${Colors.Background.Surface.Default}`
     : undefined;
 
@@ -142,6 +202,11 @@ export const MetricTile: React.FC<MetricTileProps> = ({
     if (!editable) return;
     e.preventDefault();
     e.stopPropagation();
+    const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+    // Let the canvas update selection and possibly take over (group move).
+    const takeover =
+      onHeaderPointerDown?.(tile.id, additive, e.clientX, e.clientY) ?? false;
+    if (takeover) return;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     dragState.current = {
       pointerId: e.pointerId,
@@ -152,20 +217,41 @@ export const MetricTile: React.FC<MetricTileProps> = ({
     };
   }
 
+  // Keep the tile's rotated bounding box within the canvas. Reduces to the
+  // plain box when rotation is 0, but lets rotated tiles reach the edges.
+  function clampPosition(px: number, py: number): { x: number; y: number } {
+    const rot = ((tile.rotation ?? 0) * Math.PI) / 180;
+    const w = tile.width;
+    const h = tile.height;
+    const halfW =
+      (Math.abs(Math.cos(rot)) * w) / 2 + (Math.abs(Math.sin(rot)) * h) / 2;
+    const halfH =
+      (Math.abs(Math.sin(rot)) * w) / 2 + (Math.abs(Math.cos(rot)) * h) / 2;
+    let cx = px + w / 2;
+    let cy = py + h / 2;
+    cx = Math.min(Math.max(cx, halfW), Math.max(halfW, bounds.width - halfW));
+    cy = Math.min(Math.max(cy, halfH), Math.max(halfH, bounds.height - halfH));
+    return { x: cx - w / 2, y: cy - h / 2 };
+  }
+
   function onDragPointerMove(e: React.PointerEvent) {
     const s = dragState.current;
     if (!s || s.pointerId !== e.pointerId) return;
     const dx = (e.clientX - s.startX) / scale;
     const dy = (e.clientY - s.startY) / scale;
-    onChange({
-      ...tile,
-      x: clamp(s.originX + dx, 0, Math.max(0, bounds.width - tile.width)),
-      y: clamp(s.originY + dy, 0, Math.max(0, bounds.height - tile.height)),
-    });
+    let { x: nx, y: ny } = clampPosition(s.originX + dx, s.originY + dy);
+    if (onSnap) {
+      const snapped = onSnap(tile.id, nx, ny, tile.width, tile.height);
+      ({ x: nx, y: ny } = clampPosition(snapped.x, snapped.y));
+    }
+    onChange({ ...tile, x: nx, y: ny });
   }
 
   function endDrag(e: React.PointerEvent) {
-    if (dragState.current?.pointerId === e.pointerId) dragState.current = null;
+    if (dragState.current?.pointerId === e.pointerId) {
+      dragState.current = null;
+      onGestureEnd?.();
+    }
   }
 
   function onResizePointerDown(e: React.PointerEvent) {
@@ -185,16 +271,21 @@ export const MetricTile: React.FC<MetricTileProps> = ({
   function onResizePointerMove(e: React.PointerEvent) {
     const s = resizeState.current;
     if (!s || s.pointerId !== e.pointerId) return;
-    const width = clamp(
-      s.originWidth + (e.clientX - s.startX) / scale,
-      MIN_TILE_SIZE,
-      MAX_TILE_SIZE,
-    );
-    const height = clamp(
-      s.originHeight + (e.clientY - s.startY) / scale,
-      MIN_TILE_SIZE,
-      MAX_TILE_SIZE,
-    );
+    let dx = (e.clientX - s.startX) / scale;
+    let dy = (e.clientY - s.startY) / scale;
+    // The tile may be rotated, so map the screen-space drag back into the
+    // tile's local axes before applying it to width/height.
+    const rot = ((tile.rotation ?? 0) * Math.PI) / 180;
+    if (rot) {
+      const cos = Math.cos(-rot);
+      const sin = Math.sin(-rot);
+      const localX = dx * cos - dy * sin;
+      const localY = dx * sin + dy * cos;
+      dx = localX;
+      dy = localY;
+    }
+    const width = clamp(s.originWidth + dx, MIN_TILE_SIZE, MAX_TILE_SIZE);
+    const height = clamp(s.originHeight + dy, MIN_TILE_SIZE, MAX_TILE_SIZE);
     onChange({ ...tile, width, height });
   }
 
@@ -217,6 +308,12 @@ export const MetricTile: React.FC<MetricTileProps> = ({
         top: tile.y,
         width: tile.width,
         height: tile.height,
+        transform: tile.rotation ? `rotate(${tile.rotation}deg)` : undefined,
+        transformOrigin: "center center",
+        outline: selected
+          ? `2px solid ${Colors.Border.Primary.Default}`
+          : undefined,
+        outlineOffset: 2,
         boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
@@ -225,16 +322,16 @@ export const MetricTile: React.FC<MetricTileProps> = ({
         cursor: clickable ? "pointer" : undefined,
       }}
     >
-      {outlineShape ? (
+      {transparent ? null : outlineShape ? (
         <TileOutlineLayer
           shape={shape}
-          color={thresholdColor ?? Colors.Text.Neutral.Default}
-          tint={thresholdColor ? `${thresholdColor}2b` : "transparent"}
+          color={effectiveFill ?? Colors.Text.Neutral.Default}
+          tint={effectiveFill ? `${effectiveFill}2b` : "transparent"}
         />
       ) : (
         <TileShapeLayer
           shape={shape}
-          fill={thresholdColor ?? Colors.Background.Surface.Default}
+          fill={effectiveFill ?? Colors.Background.Surface.Default}
           stroke={
             editable
               ? Colors.Border.Primary.Default
@@ -332,7 +429,7 @@ export const MetricTile: React.FC<MetricTileProps> = ({
         >
           <Markdown>{tile.markdown ?? ""}</Markdown>
         </div>
-      ) : !tile.shapeOnly ? (
+      ) : !shapeOnly ? (
       <Flex
         flexDirection="column"
         justifyContent="center"

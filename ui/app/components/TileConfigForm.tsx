@@ -46,7 +46,10 @@ export interface TileConfig {
   dql?: string;
   markdown?: string;
   shape: TileShape;
+  rotation?: number;
   shapeOnly: boolean;
+  transparent: boolean;
+  backgroundColor?: string;
   filters: TileFilter[];
   thresholds: Threshold[];
   label?: string;
@@ -75,6 +78,13 @@ const fieldLabelStyle: React.CSSProperties = {
   fontWeight: 600,
   color: Colors.Text.Neutral.Default,
 };
+
+/** Clamp/normalize a user-entered rotation string into 0–359 degrees. */
+function normalizeAngle(input: string): number {
+  const n = Math.round(Number(input));
+  if (!Number.isFinite(n)) return 0;
+  return ((n % 360) + 360) % 360;
+}
 
 /** Color of the shape picker glyphs and captions (light / dark mode). */
 const SHAPE_PICKER_COLOR_LIGHT = "#3b3fbe";
@@ -127,8 +137,19 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
   const [shape, setShape] = useState<TileShape>(
     initial?.shape ?? DEFAULT_TILE_SHAPE,
   );
+  const [rotation, setRotation] = useState<number>(initial?.rotation ?? 0);
   const [shapeOnly, setShapeOnly] = useState<boolean>(
     initial?.shapeOnly ?? false,
+  );
+  const [bgMode, setBgMode] = useState<"default" | "transparent" | "custom">(
+    initial?.transparent
+      ? "transparent"
+      : initial?.backgroundColor
+        ? "custom"
+        : "default",
+  );
+  const [bgColor, setBgColor] = useState<string>(
+    initial?.backgroundColor ?? "#134fc9",
   );
   const [filters, setFilters] = useState<TileFilter[]>(initial?.filters ?? []);
   const [thresholds, setThresholds] = useState<Threshold[]>(
@@ -264,7 +285,10 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
       markdown: isMarkdown ? markdown : undefined,
       // Markdown tiles are a plain text box, not a shape.
       shape: isMarkdown ? DEFAULT_TILE_SHAPE : shape,
+      rotation: rotation || undefined,
       shapeOnly: isMarkdown ? false : shapeOnly,
+      transparent: bgMode === "transparent",
+      backgroundColor: bgMode === "custom" ? bgColor : undefined,
       filters: isMetric
         ? filters.filter((f) => f.dimension && f.value !== "")
         : [],
@@ -471,6 +495,85 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
         </label>
       </Flex>
       )}
+
+      <Flex flexDirection="column" gap={6}>
+        <Text style={fieldLabelStyle}>Background</Text>
+        <SelectField
+          value={bgMode}
+          ariaLabel="Background"
+          onChange={(v) => setBgMode(v as "default" | "transparent" | "custom")}
+          options={[
+            { value: "default", label: "Default" },
+            { value: "transparent", label: "Transparent (no shape)" },
+            { value: "custom", label: "Custom color" },
+          ]}
+        />
+        {bgMode === "custom" && (
+          <Flex gap={6} alignItems="center" style={{ flexWrap: "wrap" }}>
+            <input
+              type="color"
+              value={bgColor}
+              aria-label="Background color"
+              onChange={(e) => setBgColor(e.target.value)}
+              style={{
+                width: 36,
+                height: 28,
+                padding: 0,
+                border: "none",
+                background: "none",
+                cursor: "pointer",
+              }}
+            />
+            {THRESHOLD_COLOR_PRESETS.map((preset) => (
+              <button
+                key={preset.color}
+                type="button"
+                title={preset.label}
+                aria-label={preset.label}
+                onClick={() => setBgColor(preset.color)}
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  background: preset.color,
+                  border:
+                    bgColor.toLowerCase() === preset.color.toLowerCase()
+                      ? "2px solid #161616"
+                      : "1px solid rgba(0,0,0,0.2)",
+                }}
+              />
+            ))}
+          </Flex>
+        )}
+      </Flex>
+
+      <Flex flexDirection="column" gap={4}>
+        <Text style={fieldLabelStyle}>Rotation</Text>
+        <Flex gap={6} alignItems="center" style={{ flexWrap: "wrap" }}>
+          <div style={{ width: 96 }}>
+            <NativeInput
+              type="number"
+              min={0}
+              max={359}
+              step={15}
+              value={String(rotation)}
+              aria-label="Rotation in degrees"
+              onChange={(e) => setRotation(normalizeAngle(e.target.value))}
+            />
+          </div>
+          {[0, 90, 180, 270].map((a) => (
+            <Button
+              key={a}
+              variant={rotation === a ? "accent" : "default"}
+              onClick={() => setRotation(a)}
+              style={{ minWidth: "auto", padding: "4px 10px" }}
+            >
+              {a}°
+            </Button>
+          ))}
+        </Flex>
+      </Flex>
 
       {!isMarkdown && (
         <Flex flexDirection="column" gap={6}>

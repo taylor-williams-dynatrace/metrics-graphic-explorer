@@ -176,8 +176,15 @@ export interface MetricTile {
   markdown?: string;
   /** Visual shape of the tile (defaults to rectangle). */
   shape?: TileShape;
+  /** Clockwise rotation of the tile in degrees (0–359, defaults to 0). */
+  rotation?: number;
   /** When true, hide the value/label and show only the shape + threshold color. */
   shapeOnly?: boolean;
+  /** When true, render no shape/background — just the text/value over the canvas. */
+  transparent?: boolean;
+  /** Static background/fill color (hex). Used as the resting fill; a matching
+   *  threshold color still overrides it at runtime. */
+  backgroundColor?: string;
   /** Lookback window the value is aggregated over (metric source). */
   lookback?: LookbackWindow;
   /** Optional dimension filters narrowing the metric (metric source). */

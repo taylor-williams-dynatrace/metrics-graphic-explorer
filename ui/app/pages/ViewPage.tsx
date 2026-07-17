@@ -10,6 +10,8 @@ import {
   ArrowLeftIcon,
   EditIcon,
   ImageIcon,
+  MaximizeIcon,
+  MinimizeIcon,
   RefreshIcon,
   SaveIcon,
 } from "@dynatrace/strato-icons";
@@ -56,8 +58,13 @@ export const ViewPage: React.FC = () => {
   const [renameOpen, setRenameOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
 
+  const [presenting, setPresenting] = useState(false);
+  const [fitToken, setFitToken] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+
   const bgFileRef = useRef<HTMLInputElement>(null);
   const bgUrlRef = useRef<string | null>(null);
+  const fsRef = useRef<HTMLDivElement>(null);
   const bgInfoRef = useRef<{ size: number; type: string } | null>(null);
 
   // Load the view document.
@@ -170,7 +177,10 @@ export const ViewPage: React.FC = () => {
       dql: config.dql,
       markdown: config.markdown,
       shape: config.shape,
+      rotation: config.rotation,
       shapeOnly: config.shapeOnly,
+      transparent: config.transparent,
+      backgroundColor: config.backgroundColor,
       filters: config.filters,
       thresholds: config.thresholds,
       label: config.label,
@@ -200,7 +210,10 @@ export const ViewPage: React.FC = () => {
               dql: config.dql,
               markdown: config.markdown,
               shape: config.shape,
+              rotation: config.rotation,
               shapeOnly: config.shapeOnly,
+              transparent: config.transparent,
+              backgroundColor: config.backgroundColor,
               filters: config.filters,
               thresholds: config.thresholds,
               label: config.label,
@@ -266,6 +279,30 @@ export const ViewPage: React.FC = () => {
     }
   }
 
+  // Presentation (full-screen) mode: uses the browser Fullscreen API so the
+  // canvas fills the whole display with no Dynatrace chrome. Falls back to an
+  // in-app maximized mode if the Fullscreen API is unavailable.
+  useEffect(() => {
+    function onFsChange() {
+      setPresenting(document.fullscreenElement === fsRef.current);
+      setFitToken((n) => n + 1);
+    }
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  function togglePresent() {
+    if (presenting || document.fullscreenElement) {
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+      else setPresenting(false);
+    } else if (fsRef.current?.requestFullscreen) {
+      void fsRef.current.requestFullscreen().catch(() => setPresenting(true));
+    } else {
+      setPresenting(true);
+    }
+    setFitToken((n) => n + 1);
+  }
+
   async function save(thenView = false) {
     if (!loaded) return;
     setSaving(true);
@@ -312,8 +349,18 @@ export const ViewPage: React.FC = () => {
   const editing = mode === "edit" && loaded.canEdit;
 
   return (
-    <Flex flexDirection="column" style={{ height: "100%", minHeight: 0 }}>
-      {/* Toolbar */}
+    <div
+      ref={fsRef}
+      style={{
+        height: "100%",
+        minHeight: 0,
+        display: "flex",
+        flexDirection: "column",
+        background: Colors.Background.Base.Default,
+      }}
+    >
+      {/* Toolbar (hidden in full-screen presentation) */}
+      {!presenting && (
       <Flex
         justifyContent="space-between"
         alignItems="center"
@@ -400,9 +447,21 @@ export const ViewPage: React.FC = () => {
           ) : (
             <>
               <Flex alignItems="center" gap={4}>
-                <RefreshIcon />
-                <Text style={{ fontSize: 12 }}>Auto-refresh 30s</Text>
+                {refreshing ? (
+                  <ProgressCircle size="small" aria-label="Refreshing data" />
+                ) : (
+                  <RefreshIcon />
+                )}
+                <Text style={{ fontSize: 12 }}>
+                  {refreshing ? "Refreshing…" : "Auto-refresh 30s"}
+                </Text>
               </Flex>
+              <Button variant="default" onClick={togglePresent}>
+                <Button.Prefix>
+                  <MaximizeIcon />
+                </Button.Prefix>
+                Present
+              </Button>
               {loaded.canEdit && (
                 <Button variant="accent" onClick={() => setMode("edit")}>
                   <Button.Prefix>
@@ -415,8 +474,9 @@ export const ViewPage: React.FC = () => {
           )}
         </Flex>
       </Flex>
+      )}
 
-      {saveError && (
+      {!presenting && saveError && (
         <Text
           style={{
             color: Colors.Text.Critical.Default,
@@ -428,7 +488,7 @@ export const ViewPage: React.FC = () => {
         </Text>
       )}
 
-      {bgError && (
+      {!presenting && bgError && (
         <Text
           style={{
             color: Colors.Text.Critical.Default,
@@ -441,7 +501,7 @@ export const ViewPage: React.FC = () => {
       )}
 
       {/* Body: canvas (+ explorer in edit mode) */}
-      <Flex style={{ flexGrow: 1, minHeight: 0 }}>
+      <Flex style={{ flexGrow: 1, minHeight: 0, position: "relative" }}>
         <GlassCanvas
           tiles={view.tiles}
           backgroundUrl={bgUrl}
@@ -449,6 +509,8 @@ export const ViewPage: React.FC = () => {
           backgroundHeight={view.backgroundHeight}
           editable={editing}
           refreshIntervalMs={editing ? EDIT_REFRESH_MS : VIEW_REFRESH_MS}
+          fitToken={fitToken}
+          onActivityChange={setRefreshing}
           onTilesChange={handleTilesChange}
           onEditTile={(t) => setEditingTile(t)}
           onBackgroundSize={handleBackgroundSize}
@@ -466,6 +528,44 @@ export const ViewPage: React.FC = () => {
             onAddTile={handleAddTile}
             currentViewId={loaded.id}
           />
+        )}
+
+        {/* Refreshing indicator (top-center) while presenting. */}
+        {presenting && refreshing && (
+          <Flex
+            alignItems="center"
+            gap={6}
+            style={{
+              position: "absolute",
+              top: 12,
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 20,
+              padding: "4px 10px",
+              borderRadius: 999,
+              background: Colors.Background.Surface.Default,
+              border: `1px solid ${Colors.Border.Neutral.Default}`,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+            }}
+          >
+            <ProgressCircle size="small" aria-label="Refreshing data" />
+            <Text style={{ fontSize: 12 }}>Refreshing…</Text>
+          </Flex>
+        )}
+
+        {/* Floating exit control while presenting full-screen. */}
+        {presenting && (
+          <Button
+            variant="default"
+            onClick={togglePresent}
+            aria-label="Exit full screen"
+            style={{ position: "absolute", top: 12, right: 12, zIndex: 20 }}
+          >
+            <Button.Prefix>
+              <MinimizeIcon />
+            </Button.Prefix>
+            Exit
+          </Button>
         )}
       </Flex>
 
@@ -518,7 +618,10 @@ export const ViewPage: React.FC = () => {
               dql: editingTile.dql,
               markdown: editingTile.markdown,
               shape: editingTile.shape,
+              rotation: editingTile.rotation,
               shapeOnly: editingTile.shapeOnly,
+              transparent: editingTile.transparent,
+              backgroundColor: editingTile.backgroundColor,
               filters: editingTile.filters,
               thresholds: editingTile.thresholds,
               label: editingTile.label,
@@ -531,6 +634,6 @@ export const ViewPage: React.FC = () => {
           />
         )}
       </Modal>
-    </Flex>
+    </div>
   );
 };
