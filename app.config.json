@@ -1,9 +1,9 @@
 {
   "$schema": "./.dt-app/app.config.schema.json",
-  "environmentUrl": "https://bop84216.apps.dynatrace.com",
+  "environmentUrl": "https://dbp10370.apps.dynatrace.com",
   "app": {
     "name": "Metrics Canvas Explorer",
-    "version": "0.1.4",
+    "version": "0.1.6",
     "description": "Live Metrics Viewer",
     "id": "my.metrics.graphic.explorer",
     "icon": "ui/assets/app-icon.svg",
@@ -11,6 +11,10 @@
       {
         "name": "storage:metrics:read",
         "comment": "read metric data via DQL timeseries/metrics"
+      },
+      {
+        "name": "document:direct-shares:read",
+        "comment": "read shares"
       },
       {
         "name": "storage:events:read",
@@ -43,6 +47,26 @@
       {
         "name": "document:documents:delete",
         "comment": "delete saved views and backgrounds"
+      },
+      {
+        "name": "document:direct-shares:read",
+        "comment": "list who a view is shared with"
+      },
+      {
+        "name": "document:direct-shares:write",
+        "comment": "share a view with specific users/groups and add recipients"
+      },
+      {
+        "name": "document:direct-shares:delete",
+        "comment": "revoke a user's/group's access to a view"
+      },
+      {
+        "name": "iam:users:read",
+        "comment": "search users by name/email for the share people picker"
+      },
+      {
+        "name": "iam:groups:read",
+        "comment": "search groups by name for the share people picker"
       }
     ]
   }

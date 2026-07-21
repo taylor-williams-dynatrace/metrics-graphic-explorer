@@ -16,8 +16,12 @@ import type {
   MetricTile as MetricTileModel,
   TileLink,
 } from "../types/metricsView";
-import { TileShapeLayer, TileOutlineLayer } from "./TileShapeLayer";
-import { isOutlineTileShape } from "../types/metricsView";
+import {
+  TileShapeLayer,
+  TileOutlineLayer,
+  TileLineLayer,
+} from "./TileShapeLayer";
+import { isLineTileShape, isOutlineTileShape } from "../types/metricsView";
 import {
   contrastTextColor,
   evaluateThresholdColor,
@@ -90,10 +94,13 @@ export const MetricTile: React.FC<MetricTileProps> = ({
   const source = tile.source ?? "metric";
   const isDql = source === "dql";
   const isMarkdown = source === "markdown";
+  const isShape = source === "shape";
+  // Non-data tiles (markdown text, static shapes) never run a query.
+  const isStatic = isMarkdown || isShape;
   const transparent = tile.transparent ?? false;
   // Shape-only makes no sense with no shape, so transparent overrides it.
   const shapeOnly = (tile.shapeOnly ?? false) && !transparent;
-  const query = isMarkdown ? "" : isDql ? tile.dql ?? "" : tileValueQuery(tile);
+  const query = isStatic ? "" : isDql ? tile.dql ?? "" : tileValueQuery(tile);
   const hasSource = isDql ? Boolean(tile.dql) : Boolean(tile.metricKey);
 
   // In shape-only mode with no thresholds, the value isn't needed at all, so
@@ -104,7 +111,7 @@ export const MetricTile: React.FC<MetricTileProps> = ({
     { query },
     {
       refetchInterval: refreshIntervalMs,
-      enabled: !isMarkdown && hasSource && needsValue && query.length > 0,
+      enabled: !isStatic && hasSource && needsValue && query.length > 0,
     },
   );
 
@@ -158,7 +165,11 @@ export const MetricTile: React.FC<MetricTileProps> = ({
     : undefined;
 
   const shape = tile.shape ?? "rectangle";
-  const outlineShape = isOutlineTileShape(shape);
+  const lineShape = isLineTileShape(shape);
+  const outlineShape = !lineShape && isOutlineTileShape(shape);
+  // Legacy "arrow" shapes default to an end arrowhead when no explicit setting.
+  const lineArrows =
+    tile.lineArrows ?? (shape === "arrow" ? "end" : "none");
   // Outline icons and transparent tiles have no solid backdrop behind the text.
   const noFill = transparent || outlineShape;
 
@@ -207,7 +218,7 @@ export const MetricTile: React.FC<MetricTileProps> = ({
     const takeover =
       onHeaderPointerDown?.(tile.id, additive, e.clientX, e.clientY) ?? false;
     if (takeover) return;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     dragState.current = {
       pointerId: e.pointerId,
       startX: e.clientX,
@@ -284,8 +295,10 @@ export const MetricTile: React.FC<MetricTileProps> = ({
       dx = localX;
       dy = localY;
     }
-    const width = clamp(s.originWidth + dx, MIN_TILE_SIZE, MAX_TILE_SIZE);
-    const height = clamp(s.originHeight + dy, MIN_TILE_SIZE, MAX_TILE_SIZE);
+    // Allow shapes to span up to the full canvas (never below the fixed floor).
+    const maxDim = Math.max(bounds.width, bounds.height, MAX_TILE_SIZE);
+    const width = clamp(s.originWidth + dx, MIN_TILE_SIZE, maxDim);
+    const height = clamp(s.originHeight + dy, MIN_TILE_SIZE, maxDim);
     onChange({ ...tile, width, height });
   }
 
@@ -302,6 +315,10 @@ export const MetricTile: React.FC<MetricTileProps> = ({
     <div
       onClick={clickable && link ? () => openTileLink(link) : undefined}
       title={clickable ? "Open link in a new tab" : undefined}
+      onPointerDown={editable ? onDragPointerDown : undefined}
+      onPointerMove={editable ? onDragPointerMove : undefined}
+      onPointerUp={editable ? endDrag : undefined}
+      onPointerCancel={editable ? endDrag : undefined}
       style={{
         position: "absolute",
         left: tile.x,
@@ -319,10 +336,20 @@ export const MetricTile: React.FC<MetricTileProps> = ({
         flexDirection: "column",
         userSelect: "none",
         touchAction: "none",
-        cursor: clickable ? "pointer" : undefined,
+        cursor: clickable ? "pointer" : editable ? "grab" : undefined,
       }}
     >
-      {transparent ? null : outlineShape ? (
+      {transparent ? null : lineShape ? (
+        <TileLineLayer
+          width={tile.width}
+          height={tile.height}
+          color={effectiveFill ?? Colors.Text.Neutral.Default}
+          weight={tile.lineWeight ?? 4}
+          dashed={tile.lineDashed ?? false}
+          arrowStart={lineArrows === "start" || lineArrows === "both"}
+          arrowEnd={lineArrows === "end" || lineArrows === "both"}
+        />
+      ) : outlineShape ? (
         <TileOutlineLayer
           shape={shape}
           color={effectiveFill ?? Colors.Text.Neutral.Default}
@@ -358,22 +385,22 @@ export const MetricTile: React.FC<MetricTileProps> = ({
           <LinkIcon />
         </div>
       )}
-      {editable && (
+      {editable && selected && (
         <Flex
           justifyContent="space-between"
           alignItems="center"
           style={{
-            position: "relative",
-            zIndex: 1,
-            cursor: "grab",
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 3,
+            cursor: "default",
             padding: "2px 4px",
             borderRadius: 4,
             background: Colors.Background.Container.Neutral.Default,
           }}
-          onPointerDown={onDragPointerDown}
-          onPointerMove={onDragPointerMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
+          onPointerDown={(e) => e.stopPropagation()}
         >
           <Flex gap={2} alignItems="center">
             <DragAllDirectionIcon />
@@ -424,12 +451,14 @@ export const MetricTile: React.FC<MetricTileProps> = ({
             width: "100%",
             boxSizing: "border-box",
             padding: 8,
+            // Clear the floating edit toolbar so text isn't hidden beneath it.
+            paddingTop: editable && selected ? 34 : 8,
             overflow: "auto",
           }}
         >
           <Markdown>{tile.markdown ?? ""}</Markdown>
         </div>
-      ) : !shapeOnly ? (
+      ) : !shapeOnly && !isShape ? (
       <Flex
         flexDirection="column"
         justifyContent="center"
@@ -484,7 +513,7 @@ export const MetricTile: React.FC<MetricTileProps> = ({
       </Flex>
       ) : null}
 
-      {editable && (
+      {editable && selected && (
         <div
           onPointerDown={onResizePointerDown}
           onPointerMove={onResizePointerMove}

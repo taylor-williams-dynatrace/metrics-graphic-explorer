@@ -12,8 +12,10 @@ import {
   ImageIcon,
   MaximizeIcon,
   MinimizeIcon,
+  PlusIcon,
   RefreshIcon,
   SaveIcon,
+  ShareIcon,
 } from "@dynatrace/strato-icons";
 import Colors from "@dynatrace/strato-design-tokens/colors";
 import {
@@ -32,6 +34,7 @@ import {
 } from "../types/metricsView";
 import { GlassCanvas } from "../components/GlassCanvas";
 import { MetricExplorer } from "../components/MetricExplorer";
+import { ShareDialog } from "../components/ShareDialog";
 import { TileConfigForm, type TileConfig } from "../components/TileConfigForm";
 
 const VIEW_REFRESH_MS = 30_000;
@@ -57,6 +60,7 @@ export const ViewPage: React.FC = () => {
   const [editingTile, setEditingTile] = useState<MetricTile | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
+  const [shareOpen, setShareOpen] = useState(false);
 
   const [presenting, setPresenting] = useState(false);
   const [fitToken, setFitToken] = useState(0);
@@ -178,6 +182,9 @@ export const ViewPage: React.FC = () => {
       markdown: config.markdown,
       shape: config.shape,
       rotation: config.rotation,
+      lineWeight: config.lineWeight,
+      lineDashed: config.lineDashed,
+      lineArrows: config.lineArrows,
       shapeOnly: config.shapeOnly,
       transparent: config.transparent,
       backgroundColor: config.backgroundColor,
@@ -186,6 +193,21 @@ export const ViewPage: React.FC = () => {
       label: config.label,
       unit: config.unit,
       link: config.link,
+      x: 24,
+      y: 24,
+      width: DEFAULT_TILE_SIZE,
+      height: DEFAULT_TILE_SIZE,
+    };
+    mutateView((v) => ({ ...v, tiles: [...v.tiles, tile] }));
+  }
+
+  function addShapeTile() {
+    const tile: MetricTile = {
+      id: generateId(),
+      source: "shape",
+      shape: "rectangle",
+      backgroundColor: "#134fc9",
+      filters: [],
       x: 24,
       y: 24,
       width: DEFAULT_TILE_SIZE,
@@ -211,6 +233,9 @@ export const ViewPage: React.FC = () => {
               markdown: config.markdown,
               shape: config.shape,
               rotation: config.rotation,
+              lineWeight: config.lineWeight,
+              lineDashed: config.lineDashed,
+              lineArrows: config.lineArrows,
               shapeOnly: config.shapeOnly,
               transparent: config.transparent,
               backgroundColor: config.backgroundColor,
@@ -405,6 +430,14 @@ export const ViewPage: React.FC = () => {
         </Flex>
 
         <Flex alignItems="center" gap={8}>
+          {loaded.canShare && (
+            <Button variant="default" onClick={() => setShareOpen(true)}>
+              <Button.Prefix>
+                <ShareIcon />
+              </Button.Prefix>
+              Share
+            </Button>
+          )}
           {editing ? (
             <>
               <input
@@ -424,6 +457,12 @@ export const ViewPage: React.FC = () => {
                 {backgroundImage || backgroundDocId
                   ? "Change background"
                   : "Add background"}
+              </Button>
+              <Button variant="default" onClick={addShapeTile}>
+                <Button.Prefix>
+                  <PlusIcon />
+                </Button.Prefix>
+                Add shape
               </Button>
               <Button
                 variant="default"
@@ -569,6 +608,21 @@ export const ViewPage: React.FC = () => {
         )}
       </Flex>
 
+      {/* Share modal */}
+      <ShareDialog
+        show={shareOpen}
+        documentId={loaded.id}
+        viewName={view.name}
+        isPrivate={loaded.isPrivate}
+        version={version}
+        legacyBackgroundDocId={backgroundDocId}
+        onVisibilityChange={(isPrivate, newVersion) => {
+          setVersion(newVersion);
+          setLoaded((prev) => (prev ? { ...prev, isPrivate } : prev));
+        }}
+        onDismiss={() => setShareOpen(false)}
+      />
+
       {/* Rename-view modal */}
       <Modal
         title="Rename view"
@@ -619,6 +673,9 @@ export const ViewPage: React.FC = () => {
               markdown: editingTile.markdown,
               shape: editingTile.shape,
               rotation: editingTile.rotation,
+              lineWeight: editingTile.lineWeight,
+              lineDashed: editingTile.lineDashed,
+              lineArrows: editingTile.lineArrows,
               shapeOnly: editingTile.shapeOnly,
               transparent: editingTile.transparent,
               backgroundColor: editingTile.backgroundColor,

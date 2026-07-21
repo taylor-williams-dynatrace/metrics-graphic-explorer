@@ -149,6 +149,23 @@ export const ShapeGlyph: React.FC<{ shape: TileShape; size?: number }> = ({
       fill: "none",
       dotColor: "currentColor",
     })}
+    {shape === "line" && (
+      <line
+        x1={10}
+        y1={50}
+        x2={90}
+        y2={50}
+        stroke="currentColor"
+        strokeWidth={8}
+        strokeLinecap="round"
+      />
+    )}
+    {shape === "arrow" && (
+      <g stroke="currentColor" strokeWidth={8} strokeLinecap="round">
+        <line x1={10} y1={50} x2={74} y2={50} />
+        <polygon points="92,50 72,39 72,61" fill="currentColor" stroke="none" />
+      </g>
+    )}
   </svg>
 );
 
@@ -255,3 +272,80 @@ export const TileOutlineLayer: React.FC<TileOutlineLayerProps> = ({
     {renderIconShape(shape, { stroke: color, fill: tint, dotColor: color })}
   </svg>
 );
+
+interface TileLineLayerProps {
+  /** Tile pixel size (used for a distortion-free viewBox). */
+  width: number;
+  height: number;
+  /** Stroke/fill color of the line. */
+  color: string;
+  /** Line thickness in px. */
+  weight: number;
+  /** Dashed vs solid. */
+  dashed: boolean;
+  /** Which ends have arrowheads. */
+  arrowStart: boolean;
+  arrowEnd: boolean;
+}
+
+/**
+ * A horizontal line (optionally dashed, with arrowheads on either/both ends)
+ * that spans the tile's width, centered vertically. Uses a pixel-accurate
+ * viewBox so arrowheads aren't distorted; rotate the tile to angle the line.
+ */
+export const TileLineLayer: React.FC<TileLineLayerProps> = ({
+  width,
+  height,
+  color,
+  weight,
+  dashed,
+  arrowStart,
+  arrowEnd,
+}) => {
+  const w = Math.max(width, 1);
+  const h = Math.max(height, 1);
+  const cy = h / 2;
+  const headLen = Math.min(Math.max(weight * 4, 14), w * 0.45);
+  const headHalf = Math.max(weight * 2.2, 8);
+  const x1 = arrowStart ? headLen : 3;
+  const x2 = arrowEnd ? w - headLen : w - 3;
+  return (
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
+      preserveAspectRatio="none"
+      width="100%"
+      height="100%"
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        inset: 0,
+        zIndex: 0,
+        pointerEvents: "none",
+        filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.18))",
+      }}
+    >
+      <line
+        x1={x1}
+        y1={cy}
+        x2={x2}
+        y2={cy}
+        stroke={color}
+        strokeWidth={weight}
+        strokeLinecap={dashed ? "butt" : "round"}
+        strokeDasharray={dashed ? `${weight * 2.5} ${weight * 2}` : undefined}
+      />
+      {arrowStart && (
+        <polygon
+          points={`2,${cy} ${headLen},${cy - headHalf} ${headLen},${cy + headHalf}`}
+          fill={color}
+        />
+      )}
+      {arrowEnd && (
+        <polygon
+          points={`${w - 2},${cy} ${w - headLen},${cy - headHalf} ${w - headLen},${cy + headHalf}`}
+          fill={color}
+        />
+      )}
+    </svg>
+  );
+};

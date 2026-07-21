@@ -36,7 +36,29 @@ export type TileShape =
   | "laptop"
   | "mobile"
   | "document"
-  | "shield";
+  | "shield"
+  | "line"
+  | "arrow";
+
+/** Extra shapes offered only for static shape tiles (not data-driven tiles). */
+export const STATIC_ONLY_SHAPES: { value: TileShape; label: string }[] = [
+  { value: "line", label: "Line" },
+];
+
+/** Which ends of a line/arrow have arrowheads. */
+export type LineArrows = "none" | "start" | "end" | "both";
+
+export const LINE_ARROW_OPTIONS: { value: LineArrows; label: string }[] = [
+  { value: "none", label: "None" },
+  { value: "end", label: "End" },
+  { value: "start", label: "Start" },
+  { value: "both", label: "Both ends" },
+];
+
+/** True for stroke-based shapes (line/arrow) that stretch to the tile box. */
+export function isLineTileShape(shape: TileShape): boolean {
+  return shape === "line" || shape === "arrow";
+}
 
 export const TILE_SHAPES: { value: TileShape; label: string }[] = [
   { value: "rectangle", label: "Rectangle" },
@@ -156,9 +178,10 @@ export interface TileLink {
 
 /**
  * What a tile displays: an existing platform metric (with aggregation / window
- * / filters), a user-supplied custom DQL query, or static markdown text.
+ * / filters), a user-supplied custom DQL query, static markdown text, or a
+ * purely decorative static shape (no data).
  */
-export type TileSource = "metric" | "dql" | "markdown";
+export type TileSource = "metric" | "dql" | "markdown" | "shape";
 
 /** A metric value tile positioned on top of the background image. */
 export interface MetricTile {
@@ -178,6 +201,12 @@ export interface MetricTile {
   shape?: TileShape;
   /** Clockwise rotation of the tile in degrees (0–359, defaults to 0). */
   rotation?: number;
+  /** Line/arrow thickness in px (line shapes only, defaults to 4). */
+  lineWeight?: number;
+  /** Whether a line/arrow is dashed (line shapes only). */
+  lineDashed?: boolean;
+  /** Which ends of a line have arrowheads (line shapes only). */
+  lineArrows?: LineArrows;
   /** When true, hide the value/label and show only the shape + threshold color. */
   shapeOnly?: boolean;
   /** When true, render no shape/background — just the text/value over the canvas. */
@@ -247,6 +276,13 @@ export interface LoadedView {
   view: MetricsGraphicView;
   /** Whether the current user may edit this view (owner / write access). */
   canEdit: boolean;
+  /**
+   * Whether the view is private (readable only by the owner and explicit
+   * share recipients). When false, the view is public to the whole environment.
+   */
+  isPrivate: boolean;
+  /** Whether the current user may manage sharing (owner / delete access). */
+  canShare: boolean;
 }
 
 /** Default tile dimensions when a metric is first added. */

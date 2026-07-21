@@ -25,6 +25,15 @@ function isMine(meta: DocumentMetaData): boolean {
   return meta.access?.includes("delete") ?? false;
 }
 
+/** Short visibility label + colors for an owned view. */
+function visibilityBadge(
+  meta: DocumentMetaData,
+): { label: string; color: string } | null {
+  if (!meta.isPrivate) return { label: "Public", color: Colors.Text.Success.Default };
+  if (meta.shareInfo?.isShared) return { label: "Shared", color: Colors.Text.Primary.Default };
+  return { label: "Private", color: Colors.Text.Neutral.Subdued };
+}
+
 export const ViewLibrary: React.FC = () => {
   const navigate = useNavigate();
   const [views, setViews] = useState<DocumentMetaData[]>([]);
@@ -143,6 +152,25 @@ export const ViewLibrary: React.FC = () => {
             </Button>
           )}
         </Flex>
+        {isMine(meta) &&
+          (() => {
+            const badge = visibilityBadge(meta);
+            return badge ? (
+              <Flex
+                alignItems="center"
+                style={{
+                  alignSelf: "flex-start",
+                  padding: "1px 8px",
+                  borderRadius: 999,
+                  border: `1px solid ${Colors.Border.Neutral.Default}`,
+                }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: 600, color: badge.color }}>
+                  {badge.label}
+                </Text>
+              </Flex>
+            ) : null;
+          })()}
         <Text style={{ fontSize: 12, color: Colors.Text.Neutral.Default }}>
           Updated{" "}
           {meta.modificationInfo?.lastModifiedTime

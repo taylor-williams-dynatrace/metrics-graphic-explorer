@@ -26,25 +26,19 @@ export async function listViews(): Promise<DocumentMetaData[]> {
 
 /**
  * Create a new view document, returning its metadata (including the new id).
- * The document is made public (read-only for everyone in the environment).
+ * New views are private by default; the owner opens them up afterwards via the
+ * Share dialog (public toggle or direct shares).
  */
 export async function createView(
   view: MetricsGraphicView,
 ): Promise<DocumentMetaData> {
-  const meta = await documentsClient.createDocument({
+  return documentsClient.createDocument({
     body: {
       name: view.name,
       type: VIEW_DOC_TYPE,
       content: jsonBlob(view),
     },
   });
-  // Documents are private by default; publish so other users can view it.
-  await documentsClient.updateDocument({
-    id: meta.id,
-    optimisticLockingVersion: meta.version,
-    body: { isPrivate: false },
-  });
-  return meta;
 }
 
 /** Load a view's content + metadata by id. */
@@ -60,8 +54,12 @@ export async function getView(id: string): Promise<LoadedView> {
     version: meta.version,
     name: meta.name,
     view,
-    // Only the owner (write access) may edit; everyone else is read-only.
+    // Write access (owner or a read-write share recipient) may edit.
     canEdit: meta.access?.includes("write") ?? false,
+    // Private unless explicitly made public.
+    isPrivate: meta.isPrivate ?? true,
+    // Only the owner (delete access) manages sharing.
+    canShare: meta.access?.includes("delete") ?? false,
   };
 }
 
@@ -80,24 +78,15 @@ export async function updateView(
     body: {
       name: view.name,
       content: jsonBlob(view),
-      // Keep the view public (also migrates views created before sharing existed).
-      isPrivate: false,
+      // Visibility is managed explicitly via the Share dialog, so we leave
+      // isPrivate untouched here (a save must not silently re-publish a view).
     },
   });
-  // Ensure the (separate) background image document is public too, so the
-  // image loads for other users — not just the view JSON.
-  if (view.backgroundDocId) {
-    try {
-      await makeDocumentPublic(view.backgroundDocId);
-    } catch {
-      // Not the owner or already public — safe to ignore.
-    }
-  }
   return result.documentMetadata?.version ?? version;
 }
 
 /** Make a document public (read-only for everyone) if it isn't already. */
-async function makeDocumentPublic(id: string): Promise<void> {
+export async function makeDocumentPublic(id: string): Promise<void> {
   const meta = await documentsClient.getDocumentMetadata({ id });
   if (meta.isPrivate === false) return;
   await documentsClient.updateDocument({

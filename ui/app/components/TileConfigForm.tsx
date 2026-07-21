@@ -14,10 +14,14 @@ import {
   DEFAULT_LOOKBACK,
   DEFAULT_TILE_SHAPE,
   generateId,
+  isLineTileShape,
+  LINE_ARROW_OPTIONS,
   LOOKBACK_OPTIONS,
+  STATIC_ONLY_SHAPES,
   THRESHOLD_COLOR_PRESETS,
   TILE_SHAPES,
   type AggregationType,
+  type LineArrows,
   type LookbackWindow,
   type Threshold,
   type TileFilter,
@@ -32,6 +36,7 @@ import {
   validateDqlResult,
 } from "../services/metricsQuery";
 import { listViews } from "../services/documentService";
+import { ConfigSection } from "./ConfigSection";
 import { FilterRow } from "./FilterRow";
 import { ThresholdRow } from "./ThresholdRow";
 import { NativeInput } from "./NativeField";
@@ -47,6 +52,9 @@ export interface TileConfig {
   markdown?: string;
   shape: TileShape;
   rotation?: number;
+  lineWeight?: number;
+  lineDashed?: boolean;
+  lineArrows?: LineArrows;
   shapeOnly: boolean;
   transparent: boolean;
   backgroundColor?: string;
@@ -108,6 +116,8 @@ const SHORT_SHAPE_LABELS: Record<TileShape, string> = {
   mobile: "Mobile",
   document: "Document",
   shield: "Shield",
+  line: "Line",
+  arrow: "Arrow",
 };
 
 export const TileConfigForm: React.FC<TileConfigFormProps> = ({
@@ -121,6 +131,7 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
 }) => {
   const isDql = source === "dql";
   const isMarkdown = source === "markdown";
+  const isShape = source === "shape";
   const shapePickerColor =
     useCurrentTheme() === "dark"
       ? SHAPE_PICKER_COLOR_DARK
@@ -135,9 +146,19 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
   const [markdown, setMarkdown] = useState<string>(initial?.markdown ?? "");
   const [test, setTest] = useState<TestState>({ status: "idle", message: "" });
   const [shape, setShape] = useState<TileShape>(
-    initial?.shape ?? DEFAULT_TILE_SHAPE,
+    // Legacy "arrow" shape is now "line" with an end arrowhead.
+    initial?.shape === "arrow" ? "line" : initial?.shape ?? DEFAULT_TILE_SHAPE,
   );
   const [rotation, setRotation] = useState<number>(initial?.rotation ?? 0);
+  const [lineWeight, setLineWeight] = useState<number>(
+    initial?.lineWeight ?? 4,
+  );
+  const [lineDashed, setLineDashed] = useState<boolean>(
+    initial?.lineDashed ?? false,
+  );
+  const [lineArrows, setLineArrows] = useState<LineArrows>(
+    initial?.lineArrows ?? (initial?.shape === "arrow" ? "end" : "none"),
+  );
   const [shapeOnly, setShapeOnly] = useState<boolean>(
     initial?.shapeOnly ?? false,
   );
@@ -269,11 +290,13 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
   }
 
   const isMetric = source === "metric";
-  const canSubmit = isMarkdown
-    ? markdown.trim().length > 0
-    : isDql
-      ? test.status === "ok"
-      : Boolean(metricKey);
+  const canSubmit = isShape
+    ? true
+    : isMarkdown
+      ? markdown.trim().length > 0
+      : isDql
+        ? test.status === "ok"
+        : Boolean(metricKey);
 
   function handleSubmit() {
     onSubmit({
@@ -286,17 +309,21 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
       // Markdown tiles are a plain text box, not a shape.
       shape: isMarkdown ? DEFAULT_TILE_SHAPE : shape,
       rotation: rotation || undefined,
-      shapeOnly: isMarkdown ? false : shapeOnly,
+      lineWeight: isLineTileShape(shape) ? lineWeight : undefined,
+      lineDashed: isLineTileShape(shape) ? lineDashed : undefined,
+      lineArrows: isLineTileShape(shape) ? lineArrows : undefined,
+      shapeOnly: isMarkdown || isShape ? false : shapeOnly,
       transparent: bgMode === "transparent",
       backgroundColor: bgMode === "custom" ? bgColor : undefined,
       filters: isMetric
         ? filters.filter((f) => f.dimension && f.value !== "")
         : [],
-      thresholds: isMarkdown
-        ? []
-        : thresholds.filter((t) => Number.isFinite(t.value)),
-      label: isMarkdown ? undefined : label.trim() || undefined,
-      unit: isMarkdown ? undefined : unit.trim() || undefined,
+      thresholds:
+        isMarkdown || isShape
+          ? []
+          : thresholds.filter((t) => Number.isFinite(t.value)),
+      label: isMarkdown || isShape ? undefined : label.trim() || undefined,
+      unit: isMarkdown || isShape ? undefined : unit.trim() || undefined,
       link: resolveLink(),
     });
   }
@@ -311,7 +338,9 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
           : "idle";
 
   return (
-    <Flex flexDirection="column" gap={12} style={{ width: "100%" }}>
+    <Flex flexDirection="column" gap={8} style={{ width: "100%" }}>
+      {!isShape && (
+      <ConfigSection title="Data source">
       {isMarkdown ? (
         <Flex flexDirection="column" gap={6}>
           <Text style={fieldLabelStyle}>Markdown content</Text>
@@ -433,12 +462,16 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
           </Flex>
         </>
       )}
+      </ConfigSection>
+      )}
 
+      <ConfigSection title="Appearance">
       {!isMarkdown && (
       <Flex flexDirection="column" gap={6}>
         <Text style={fieldLabelStyle}>Tile shape</Text>
         <Flex gap={6} style={{ flexWrap: "wrap" }}>
-          {TILE_SHAPES.map((s) => {
+          {(isShape ? [...TILE_SHAPES, ...STATIC_ONLY_SHAPES] : TILE_SHAPES).map(
+            (s) => {
             const selected = shape === s.value;
             return (
               <button
@@ -475,25 +508,72 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
             );
           })}
         </Flex>
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: 12,
-            fontWeight: 500,
-            color: Colors.Text.Neutral.Default,
-            cursor: "pointer",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={shapeOnly}
-            onChange={(e) => setShapeOnly(e.target.checked)}
-          />
-          Show shape only (hide value &amp; label)
-        </label>
+        {!isShape && (
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              fontWeight: 500,
+              color: Colors.Text.Neutral.Default,
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={shapeOnly}
+              onChange={(e) => setShapeOnly(e.target.checked)}
+            />
+            Show shape only (hide value &amp; label)
+          </label>
+        )}
       </Flex>
+      )}
+
+      {isLineTileShape(shape) && (
+        <Flex flexDirection="column" gap={6}>
+          <Text style={fieldLabelStyle}>Line format</Text>
+          <Flex gap={8} style={{ flexWrap: "wrap" }}>
+            <Flex flexDirection="column" gap={4} style={{ width: 96 }}>
+              <Text style={fieldLabelStyle}>Weight</Text>
+              <NativeInput
+                type="number"
+                min={1}
+                max={40}
+                value={String(lineWeight)}
+                aria-label="Line weight"
+                onChange={(e) => {
+                  const n = Math.round(Number(e.target.value));
+                  setLineWeight(
+                    Number.isFinite(n) ? Math.max(1, Math.min(40, n)) : 4,
+                  );
+                }}
+              />
+            </Flex>
+            <Flex flexDirection="column" gap={4} style={{ width: 120 }}>
+              <Text style={fieldLabelStyle}>Style</Text>
+              <SelectField
+                value={lineDashed ? "dashed" : "solid"}
+                ariaLabel="Line style"
+                onChange={(v) => setLineDashed(v === "dashed")}
+                options={[
+                  { value: "solid", label: "Solid" },
+                  { value: "dashed", label: "Dashed" },
+                ]}
+              />
+            </Flex>
+            <Flex flexDirection="column" gap={4} style={{ width: 140 }}>
+              <Text style={fieldLabelStyle}>Arrowheads</Text>
+              <SelectField
+                value={lineArrows}
+                ariaLabel="Arrowheads"
+                onChange={(v) => setLineArrows(v as LineArrows)}
+                options={LINE_ARROW_OPTIONS}
+              />
+            </Flex>
+          </Flex>
+        </Flex>
       )}
 
       <Flex flexDirection="column" gap={6}>
@@ -574,11 +654,11 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
           ))}
         </Flex>
       </Flex>
+      </ConfigSection>
 
-      {!isMarkdown && (
-        <Flex flexDirection="column" gap={6}>
-          <Flex justifyContent="space-between" alignItems="center">
-            <Text style={fieldLabelStyle}>Color thresholds</Text>
+      {!isMarkdown && !isShape && (
+        <ConfigSection title="Color thresholds" defaultOpen={false}>
+          <Flex justifyContent="flex-end" alignItems="center">
             <Button variant="default" onClick={addThreshold}>
               <Button.Prefix>
                 <PlusIcon />
@@ -618,11 +698,12 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
               ))}
             </>
           )}
-        </Flex>
+        </ConfigSection>
       )}
 
-      {!isMarkdown && (
-      <Flex gap={8}>
+      {!isMarkdown && !isShape && (
+        <ConfigSection title="Label & unit">
+        <Flex gap={8}>
         <Flex flexDirection="column" gap={4} style={{ flex: 1 }}>
           <Text style={fieldLabelStyle}>Label (optional)</Text>
           <NativeInput
@@ -640,10 +721,10 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
           />
         </Flex>
       </Flex>
+        </ConfigSection>
       )}
 
-      <Flex flexDirection="column" gap={4}>
-        <Text style={fieldLabelStyle}>Hyperlink (optional)</Text>
+      <ConfigSection title="Hyperlink" defaultOpen={false}>
         <SelectField
           value={linkChoice}
           ariaLabel="Hyperlink type"
@@ -689,7 +770,7 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
           When set, the tile shows a link icon and opens this destination in a
           new tab when clicked in view mode.
         </Text>
-      </Flex>
+      </ConfigSection>
 
       <Flex gap={8} justifyContent="flex-end">
         {onCancel && (
