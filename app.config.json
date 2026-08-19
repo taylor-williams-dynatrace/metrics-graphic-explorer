@@ -1,9 +1,9 @@
 {
   "$schema": "./.dt-app/app.config.schema.json",
-  "environmentUrl": "https://dbp10370.apps.dynatrace.com",
+  "environmentUrl": "https://ref47486.sprint.apps.dynatracelabs.com/",
   "app": {
     "name": "Metrics Canvas Explorer",
-    "version": "0.1.6",
+    "version": "0.1.7",
     "description": "Live Metrics Viewer",
     "id": "my.metrics.graphic.explorer",
     "icon": "ui/assets/app-icon.svg",
