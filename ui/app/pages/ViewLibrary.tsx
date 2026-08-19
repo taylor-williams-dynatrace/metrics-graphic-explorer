@@ -215,7 +215,7 @@ export const ViewLibrary: React.FC = () => {
     <Flex flexDirection="column" gap={24} padding={32}>
       <Flex justifyContent="space-between" alignItems="center">
         <Flex flexDirection="column" gap={4}>
-          <Heading level={2}>Saved Canvas Views</Heading>
+          <Heading level={2}>Saved Canvases</Heading>
           <Paragraph>
             Place live metric tiles on top of a custom background image.
           </Paragraph>

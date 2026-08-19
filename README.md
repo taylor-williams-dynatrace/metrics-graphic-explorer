@@ -1,4 +1,4 @@
-# Metrics Canvas Explorer
+# Canvases
 
 A Dynatrace App that allows you to create a saved
 **Metrics Canvas View**, choose a static background image (or a blank

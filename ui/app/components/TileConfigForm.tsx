@@ -13,13 +13,16 @@ import {
   AGGREGATIONS,
   DEFAULT_LOOKBACK,
   DEFAULT_TILE_SHAPE,
+  DEFAULT_VALUE_POSITION,
   generateId,
   isLineTileShape,
+  isOutlineTileShape,
   LINE_ARROW_OPTIONS,
   LOOKBACK_OPTIONS,
   STATIC_ONLY_SHAPES,
   THRESHOLD_COLOR_PRESETS,
   TILE_SHAPES,
+  VALUE_POSITION_OPTIONS,
   type AggregationType,
   type LineArrows,
   type LookbackWindow,
@@ -28,6 +31,7 @@ import {
   type TileLink,
   type TileShape,
   type TileSource,
+  type ValuePosition,
 } from "../types/metricsView";
 import {
   dimensionKeysFromRecord,
@@ -58,6 +62,7 @@ export interface TileConfig {
   shapeOnly: boolean;
   transparent: boolean;
   backgroundColor?: string;
+  valuePosition?: ValuePosition;
   filters: TileFilter[];
   thresholds: Threshold[];
   label?: string;
@@ -161,6 +166,9 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
   );
   const [shapeOnly, setShapeOnly] = useState<boolean>(
     initial?.shapeOnly ?? false,
+  );
+  const [valuePosition, setValuePosition] = useState<ValuePosition>(
+    initial?.valuePosition ?? DEFAULT_VALUE_POSITION,
   );
   const [bgMode, setBgMode] = useState<"default" | "transparent" | "custom">(
     initial?.transparent
@@ -315,6 +323,8 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
       shapeOnly: isMarkdown || isShape ? false : shapeOnly,
       transparent: bgMode === "transparent",
       backgroundColor: bgMode === "custom" ? bgColor : undefined,
+      valuePosition:
+        isMarkdown || isShape ? undefined : valuePosition,
       filters: isMetric
         ? filters.filter((f) => f.dimension && f.value !== "")
         : [],
@@ -530,6 +540,31 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
         )}
       </Flex>
       )}
+
+      {!isMarkdown &&
+        !isShape &&
+        !shapeOnly &&
+        isOutlineTileShape(shape) &&
+        !isLineTileShape(shape) && (
+          <Flex flexDirection="column" gap={4} style={{ maxWidth: 220 }}>
+            <Text style={fieldLabelStyle}>Value position</Text>
+            <SelectField
+              value={valuePosition}
+              ariaLabel="Value position"
+              onChange={(v) => setValuePosition(v as ValuePosition)}
+              options={VALUE_POSITION_OPTIONS}
+            />
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: 500,
+                color: Colors.Text.Neutral.Default,
+              }}
+            >
+              Move the value &amp; label off the icon so they stay readable.
+            </Text>
+          </Flex>
+        )}
 
       {isLineTileShape(shape) && (
         <Flex flexDirection="column" gap={6}>

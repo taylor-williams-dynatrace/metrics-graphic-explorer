@@ -45,6 +45,23 @@ export const STATIC_ONLY_SHAPES: { value: TileShape; label: string }[] = [
   { value: "line", label: "Line" },
 ];
 
+/**
+ * Where a tile's value + label are placed within the tile. Mostly matters for
+ * outline (icon) shapes, whose busy geometry makes a centered value hard to
+ * read — moving it to an edge keeps it legible.
+ */
+export type ValuePosition = "center" | "left" | "right" | "bottom";
+
+export const VALUE_POSITION_OPTIONS: { value: ValuePosition; label: string }[] =
+  [
+    { value: "center", label: "Center" },
+    { value: "bottom", label: "Bottom" },
+    { value: "left", label: "Left" },
+    { value: "right", label: "Right" },
+  ];
+
+export const DEFAULT_VALUE_POSITION: ValuePosition = "center";
+
 /** Which ends of a line/arrow have arrowheads. */
 export type LineArrows = "none" | "start" | "end" | "both";
 
@@ -220,6 +237,8 @@ export interface MetricTile {
   filters: TileFilter[];
   /** Optional color thresholds, evaluated in order (first match wins). */
   thresholds?: Threshold[];
+  /** Where the value + label are placed within the tile (defaults to center). */
+  valuePosition?: ValuePosition;
   /** Optional user-facing label (defaults to the metric key). */
   label?: string;
   /** Optional unit suffix shown next to the value. */

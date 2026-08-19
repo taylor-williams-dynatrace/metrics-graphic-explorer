@@ -21,7 +21,12 @@ import {
   TileOutlineLayer,
   TileLineLayer,
 } from "./TileShapeLayer";
-import { isLineTileShape, isOutlineTileShape } from "../types/metricsView";
+import {
+  DEFAULT_VALUE_POSITION,
+  isLineTileShape,
+  isOutlineTileShape,
+  type ValuePosition,
+} from "../types/metricsView";
 import {
   contrastTextColor,
   evaluateThresholdColor,
@@ -183,6 +188,20 @@ export const MetricTile: React.FC<MetricTileProps> = ({
       : valueTextColor;
   const contentTextShadow = noFill
     ? `0 0 3px ${Colors.Background.Surface.Default}, 0 0 2px ${Colors.Background.Surface.Default}`
+    : undefined;
+
+  // Where the value + label sit within the tile. Defaults to center; edge
+  // placements keep the value legible over busy outline-icon geometry.
+  const valuePosition = tile.valuePosition ?? DEFAULT_VALUE_POSITION;
+  // For outline icons, an off-center value gets its own reserved band: the icon
+  // shrinks into the opposite region so the value/label never overlap it.
+  const reserveSpace = outlineShape && valuePosition !== "center";
+  const iconInset = reserveSpace
+    ? valuePosition === "bottom"
+      ? { bottom: "38%" }
+      : valuePosition === "left"
+        ? { left: "50%" }
+        : { right: "50%" } // "right"
     : undefined;
 
   const link = tile.link;
@@ -354,6 +373,7 @@ export const MetricTile: React.FC<MetricTileProps> = ({
           shape={shape}
           color={effectiveFill ?? Colors.Text.Neutral.Default}
           tint={effectiveFill ? `${effectiveFill}2b` : "transparent"}
+          inset={iconInset}
         />
       ) : (
         <TileShapeLayer
@@ -459,14 +479,7 @@ export const MetricTile: React.FC<MetricTileProps> = ({
           <Markdown>{tile.markdown ?? ""}</Markdown>
         </div>
       ) : !shapeOnly && !isShape ? (
-      <Flex
-        flexDirection="column"
-        justifyContent="center"
-        alignItems="center"
-        flexGrow={1}
-        gap={2}
-        style={{ position: "relative", zIndex: 1, padding: 6, minHeight: 0 }}
-      >
+      <div style={valueBlockStyle(valuePosition, reserveSpace)}>
         {isLoading && numericValue == null ? (
           <ProgressCircle size="small" aria-label="Loading value" />
         ) : error ? (
@@ -484,7 +497,7 @@ export const MetricTile: React.FC<MetricTileProps> = ({
             style={{
               fontSize: tileFontSize(tile.width, tile.height),
               fontWeight: 600,
-              textAlign: "center",
+              textAlign: reserveSpace ? "center" : valueTextAlign(valuePosition),
               color: contentTextColor,
               textShadow: contentTextShadow,
             }}
@@ -495,7 +508,7 @@ export const MetricTile: React.FC<MetricTileProps> = ({
         {label && (
           <Text
             style={{
-              textAlign: "center",
+              textAlign: reserveSpace ? "center" : valueTextAlign(valuePosition),
               fontSize: 11,
               color: contentTextColor ?? Colors.Text.Neutral.Default,
               textShadow: contentTextShadow,
@@ -510,7 +523,7 @@ export const MetricTile: React.FC<MetricTileProps> = ({
             {label}
           </Text>
         )}
-      </Flex>
+      </div>
       ) : null}
 
       {editable && selected && (
@@ -538,6 +551,60 @@ export const MetricTile: React.FC<MetricTileProps> = ({
 
 function tileFontSize(width: number, height: number): number {
   return Math.max(14, Math.min(34, Math.round(Math.min(width, height) / 5)));
+}
+
+/** Horizontal text alignment matching a value-block placement. */
+function valueTextAlign(position: ValuePosition): "left" | "right" | "center" {
+  if (position === "left") return "left";
+  if (position === "right") return "right";
+  return "center";
+}
+
+/**
+ * Absolute-positioned box for the value + label, anchored per {@link
+ * ValuePosition}. Center overlays the whole tile (original behavior). When
+ * `reserve` is true (outline icons with an off-center value), the block takes
+ * its own band — the complement of the shrunk icon's region — so the value and
+ * label sit in dedicated blank space, fully separated from the graphic. Without
+ * `reserve` the block is edge-anchored and overlays the shape.
+ */
+function valueBlockStyle(
+  position: ValuePosition,
+  reserve: boolean,
+): React.CSSProperties {
+  const base: React.CSSProperties = {
+    position: "absolute",
+    zIndex: 1,
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+    padding: 4,
+    boxSizing: "border-box",
+    justifyContent: "center",
+    pointerEvents: "none",
+  };
+  if (reserve) {
+    // Occupy the band opposite the shrunk icon (see iconInset in MetricTile).
+    switch (position) {
+      case "bottom":
+        return { ...base, left: 0, right: 0, bottom: 0, height: "38%", alignItems: "center" };
+      case "left":
+        return { ...base, left: 0, top: 0, bottom: 0, width: "50%", alignItems: "center" };
+      case "right":
+        return { ...base, right: 0, top: 0, bottom: 0, width: "50%", alignItems: "center" };
+    }
+  }
+  switch (position) {
+    case "bottom":
+      return { ...base, left: 0, right: 0, bottom: 0, justifyContent: "flex-end", alignItems: "center" };
+    case "left":
+      return { ...base, left: 0, top: 0, bottom: 0, maxWidth: "55%", alignItems: "flex-start" };
+    case "right":
+      return { ...base, right: 0, top: 0, bottom: 0, maxWidth: "55%", alignItems: "flex-end" };
+    case "center":
+    default:
+      return { ...base, inset: 0, alignItems: "center" };
+  }
 }
 
 /** Open a tile's drill-down link in a new browser tab. */

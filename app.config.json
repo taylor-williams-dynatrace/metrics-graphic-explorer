@@ -1,9 +1,9 @@
 {
   "$schema": "./.dt-app/app.config.schema.json",
-  "environmentUrl": "https://dbp10370.apps.dynatrace.com",
+  "environmentUrl": "https://bop84216.apps.dynatrace.com",
   "app": {
-    "name": "Metrics Canvas Explorer",
-    "version": "0.1.6",
+    "name": "Canvases",
+    "version": "0.1.8",
     "description": "Live Metrics Viewer",
     "id": "my.metrics.graphic.explorer",
     "icon": "ui/assets/app-icon.svg",
@@ -22,6 +22,14 @@
       },
       {
         "name": "storage:bizevents:read",
+        "comment": "read business event data via DQL bizevents"
+      },
+      {
+        "name": "storage:user.events:read",
+        "comment": "read business event data via DQL bizevents"
+      },
+      {
+        "name": "storage:user.sessions:read",
         "comment": "read business event data via DQL bizevents"
       },
       {

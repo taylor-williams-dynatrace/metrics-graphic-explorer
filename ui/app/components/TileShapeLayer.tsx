@@ -242,28 +242,37 @@ interface TileOutlineLayerProps {
   color: string;
   /** Subtle translucent interior fill (or "none"). */
   tint: string;
+  /**
+   * Optional edge insets that shrink the icon into part of the tile, freeing
+   * the rest for the value/label. Longhand values override the default 0 edges.
+   */
+  inset?: Pick<React.CSSProperties, "top" | "right" | "bottom" | "left">;
 }
 
 /**
  * Outline shape layer for the icon shapes: reuses the exact picker-glyph
  * geometry, colors the outline with the threshold color, and applies a subtle
  * translucent fill. Uses a "meet" aspect ratio so the icon stays crisp and
- * undistorted (like the picker), centered rather than stretched.
+ * undistorted (like the picker), centered rather than stretched. When `inset`
+ * is given, the icon shrinks into that sub-region (staying centered within it).
  */
 export const TileOutlineLayer: React.FC<TileOutlineLayerProps> = ({
   shape,
   color,
   tint,
+  inset,
 }) => (
   <svg
     viewBox="0 0 100 100"
     preserveAspectRatio="xMidYMid meet"
-    width="100%"
-    height="100%"
     aria-hidden="true"
     style={{
       position: "absolute",
-      inset: 0,
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      ...inset,
       zIndex: 0,
       pointerEvents: "none",
       filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.18))",
