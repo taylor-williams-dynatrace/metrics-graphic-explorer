@@ -15,7 +15,7 @@
     "lint": "eslint ."
   },
   "engines": {
-    "node": ">=16.13.0"
+    "node": ">=20"
   },
   "author": "",
   "license": "ISC",
