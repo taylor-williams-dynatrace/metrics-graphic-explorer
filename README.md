@@ -1,123 +1,173 @@
 # Canvases
 
-A Dynatrace App that allows you to create a saved
-**Metrics Canvas View**, choose a static background image (or a blank
-canvas), then place live metric value tiles anywhere on top of it. Finished
-views run in a read-only **View mode** that auto-refreshes every 30 seconds.
+A Dynatrace App for building **canvases**: upload a static background image (or
+start blank), then place live metric tiles, text, and shapes anywhere on top of
+it — much like a Splunk ITSI glass table. Finished canvases run in a read-only
+**View mode** that auto-refreshes every 30 seconds.
 
-It uses React + TypeScript with the Strato Design System.
+Built with React + TypeScript and the Strato Design System.
 
 ## How it works
 
-- **Library (`/`)** — lists all saved views (Document Service documents of type
-  `metrics-graphic-view`). Create a view by giving it a name and either
-  uploading a background image or starting with a blank canvas.
+- **Saved Canvases (`/`)** — the library lists every canvas you can access
+  (Document Service documents of type `metrics-graphic-view`). Create one by
+  giving it a name and either uploading a background image or starting with a
+  blank canvas.
 - **Editor / workshop mode (`/view/:id?mode=edit`)** — the background fills the
-  canvas; the **Add a tile** panel on the right lets you create a tile from one
-  of two sources:
-  - **Use existing metric** — the metrics explorer lists every metric available
-    in the environment (discovered via the DQL `metrics` command). Pick a
-    metric, choose an aggregation (avg / sum / min / max / count), an
-    aggregation window (5 min / 15 min / 1 hour), and optional dimension
-    filters.
-  - **Create via DQL** — write a custom DQL query in an editor and test it. A
-    validator at the test step requires the query to return exactly one value
-    (a single numeric or text value — no tables, series, or multiple fields)
-    before the tile can be added. Aggregation, aggregation window, and filters
-    don't apply to this source and are hidden.
+  canvas and the **Add a tile** panel lets you place any of four kinds of tile:
+  - **Use existing metric** — the metrics explorer lists every metric in the
+    environment (discovered via the DQL `metrics` command). Pick a metric, an
+    aggregation (avg / sum / min / max / count), an aggregation window
+    (5 min / 15 min / 1 hour), and optional dimension filters.
+  - **Create via DQL** — write and test a custom DQL query. The validator
+    requires the query to return exactly one value (a single numeric or text
+    value — no tables, series, or multiple fields) before the tile can be added.
+  - **Markdown** — a free-form text tile authored in markdown (headings, bold,
+    lists, links, etc.), for titles, notes, and legends.
+  - **Shape** — a purely decorative shape with no data behind it.
 
-  Both sources share the rest of the tile options: shape, "show shape only",
-  color thresholds, label, unit, and an optional drill-down hyperlink. Tiles can
-  be dragged, freely resized into rectangles, duplicated, and edited. You can
-  rename the view, change the background, and zoom the canvas (buttons or
-  Ctrl/⌘-scroll).
+  Metric and DQL tiles also share the value options: color thresholds, label,
+  unit, "show shape only", and an optional drill-down hyperlink (to another
+  canvas or an external URL).
+
 - **View mode (`/view/:id`)** — the editor chrome disappears and each tile's
   value refreshes every 30 s. Metric tiles run a scalar `timeseries` query
   (`<agg>(metric, scalar:true)`); DQL tiles run the user's query and read its
-  single value (numeric or text). Tiles recolor themselves based on their
-  thresholds (numeric values only). Click **Edit** to return to the workshop
-  (owner only).
+  single value (numeric or text). Tiles recolor based on their thresholds
+  (numeric values only), and a linked tile opens its destination in a new tab.
+  Click **Edit** to return to the workshop (owner only).
+
+### Tile appearance
+
+- **Shapes** — basic geometry (rectangle, rounded rectangle, circle/ellipse,
+  triangle, diamond, cloud), outline **icon** shapes (server, application,
+  database, user, users, globe, laptop, mobile, document, shield), and
+  **line/arrow** shapes with configurable weight, solid/dashed style, and
+  arrowheads on either or both ends.
+- **Value position** — for the outline icon shapes, the value and label can be
+  placed **center / bottom / left / right**. Off-center placements shrink the
+  icon into part of the tile and give the value its own reserved space, so it
+  stays readable over busy graphics instead of overlapping them.
+- **Background** — default surface, a custom fill color, or fully transparent
+  (text only, no shape).
+- **Rotation** — any angle (with 0 / 90 / 180 / 270 presets).
+
+### Canvas interactions
+
+Tiles can be dragged, freely resized, duplicated, and edited. Select multiple
+tiles with a marquee or Shift/Ctrl-click to move them as a group; alignment
+guides and snapping help line tiles up. You can rename the canvas, change the
+background, and zoom (buttons or Ctrl/⌘-scroll).
+
+### Sharing
+
+Each canvas is either **private** (visible only to the owner and explicit share
+recipients) or **public** to the whole environment. Owners can manage sharing
+from the **Share** dialog, searching for individual users or groups via a people
+picker and granting or revoking access. Only the owner can edit or delete a
+canvas.
 
 ### Storage & data
 
-- Saved views are single JSON documents (Document Service, type
-  `metrics-graphic-view`), published as read-only to the environment so any user
-  can view them; only the owner can edit or delete.
-- The background image is embedded **inside** the view document as a data URL
-  (`backgroundImage`), so it loads for every user who can read the view. (A
+- Saved canvases are single JSON documents (Document Service, type
+  `metrics-graphic-view`); only the owner can edit or delete.
+- The background image is embedded **inside** the canvas document as a data URL
+  (`backgroundImage`), so it loads for every user who can read the canvas. (A
   legacy `backgroundDocId` pointing at a separate image document is still read as
-  a fallback for older views; re-saving migrates them.) Uploads are capped at
+  a fallback for older canvases; re-saving migrates them.) Uploads are capped at
   8 MB.
 - Each tile stores its value source: a metric tile keeps `metricKey`,
   `aggregation`, `lookback`, and `filters`; a DQL tile keeps its custom `dql`
-  query string instead. Tile values themselves are always read live from Grail —
-  no values are persisted.
+  string; markdown and shape tiles keep their content/appearance only. Tile
+  values are always read live from Grail — no values are persisted.
 
 ### Source layout
 
 - `ui/app/types/metricsView.ts` — data model and constants.
 - `ui/app/services/documentService.ts` — Document Service CRUD, publishing, and
   image-to-data-URL embedding.
+- `ui/app/services/shareService.ts` — direct-share management (users/groups).
 - `ui/app/services/metricsQuery.ts` — DQL builders, DQL single-value
   extraction/validation, threshold evaluation, and value formatting.
-- `ui/app/components/` — `GlassCanvas`, `MetricTile`, `MetricExplorer`,
-  `TileConfigForm`, `FilterRow`, `ThresholdRow`, `TileShapeLayer`,
-  `CreateViewModal`, `NativeField`, `SelectField`, `MultiSelectField`.
+- `ui/app/components/` — `GlassCanvas`, `MetricTile`, `TileShapeLayer`,
+  `MetricExplorer`, `TileConfigForm`, `FilterRow`, `ThresholdRow`,
+  `CreateViewModal`, `ShareDialog`, `NativeField`, `SelectField`,
+  `MultiSelectField`, `ConfigSection`.
 - `ui/app/pages/` — `ViewLibrary`, `ViewPage`.
 
 See [`docs/architecture.md`](docs/architecture.md) for a deeper walkthrough.
 
 ### Required scopes (`app.config.json`)
 
-`storage:metrics:read`, `storage:buckets:read`,
-`document:documents:read`, `document:documents:write`,
-`document:documents:delete`.
+- **Data (DQL):** `storage:metrics:read`, `storage:buckets:read`,
+  `storage:events:read`, `storage:bizevents:read`, `storage:user.events:read`,
+  `storage:user.sessions:read`, `storage:logs:read`, `storage:spans:read`.
+- **Documents:** `document:documents:read`, `document:documents:write`,
+  `document:documents:delete`.
+- **Sharing:** `document:direct-shares:read`, `document:direct-shares:write`,
+  `document:direct-shares:delete`.
+- **People picker:** `iam:users:read`, `iam:groups:read`.
 
 Other users need `document:documents:read` (and `write` to create their own)
 granted via an IAM policy to see shared canvases.
 
-> Note: the old starter pages (`Home.tsx`, `Data.tsx`, `Card.tsx`) are no longer
-> routed and can be deleted.
-
 ---
 
-## Getting Started with your Dynatrace App
+## Getting started
 
-This project was bootstrapped with Dynatrace App Toolkit.
+This project was bootstrapped with the Dynatrace App Toolkit (`dt-app`).
 
-## Available Scripts
+### Prerequisites
 
-In the project directory, you can run:
+- **Node.js ≥ 20** (required by `dt-app`; the build/dev tooling will not run on
+  older versions).
+- After cloning, install exactly what the lock file specifies:
+
+  ```
+  npm ci
+  ```
+
+  All dependencies resolve from the public npm registry, so no custom `.npmrc`
+  or registry authentication is needed.
+
+## Available scripts
+
+In the project directory you can run:
 
 ### `npm run start`
 
-Runs the app in the development mode. A new browser window with your running app will be automatically opened.
-
-Edit a component file in `ui` and save it. The page will reload when you make changes. You may also see any errors in the console.
+Runs the app in development mode and opens a browser window automatically. Edit a
+component in `ui` and save — the page hot-reloads and errors surface in the
+console.
 
 ### `npm run build`
 
-Builds the app for production to the `dist` folder. It correctly bundles your app in production mode and optimizes the build for the best performance.
+Builds the app for production into the `dist` folder, bundled and optimized.
+
+### `npm run lint`
+
+Runs ESLint across the project.
 
 ### `npm run deploy`
 
-Builds the app and deploys it to the specified environment in `app.config.json`.
+Builds and deploys the app to the environment specified in `app.config.json`.
 
-### `npm run uninstall
+### `npm run uninstall`
 
-Uninstalls the app from the specified environment in `app.config.json`.
+Uninstalls the app from the environment specified in `app.config.json`.
 
-### `npm run generate:function`
+### `npm run create:function`
 
-Generates a new serverless function for your app in the `api` folder.
+Generates a new serverless function for the app.
 
 ### `npm run update`
 
-Updates @dynatrace-scoped packages to the latest version and applies automatic migrations.
+Updates `@dynatrace`-scoped packages to the latest version and applies automatic
+migrations.
 
 ### `npm run info`
 
-Outputs the CLI and environment information.
+Outputs CLI and environment information.
 
 ### `npm run help`
 
@@ -125,6 +175,6 @@ Outputs help for the Dynatrace App Toolkit.
 
 ## Learn more
 
-You can find more information on how to use all the features of the new Dynatrace Platform in [Dynatrace Developer](https://dt-url.net/developers).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
+Find more on the Dynatrace platform in
+[Dynatrace Developer](https://dt-url.net/developers), and learn React from the
+[React documentation](https://react.dev/).
