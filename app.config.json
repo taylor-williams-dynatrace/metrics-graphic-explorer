@@ -1,6 +1,6 @@
 {
   "$schema": "./.dt-app/app.config.schema.json",
-  "environmentUrl": "https://<env_id>.apps.dynatrace.com/",
+  "environmentUrl": "https://dvq23986.apps.dynatrace.com/",
   "app": {
     "name": "Canvases",
     "version": "0.2.3",
@@ -45,8 +45,12 @@
         "comment": "read entity data via DQL (dt.entity.* tables, e.g. dt.entity.service)"
       },
       {
+        "name": "storage:system:read",
+        "comment": "read Dynatrace internal/system tables (audit, query execution, dt.system.*)"
+      },
+      {
         "name": "storage:buckets:read",
-        "comment": "required alongside metrics read"
+        "comment": "required alongside table reads; grants access to Grail buckets"
       },
       {
         "name": "document:documents:read",

@@ -1,0 +1,19 @@
+title: "Dynatrace Canvases"
+description: Dynatrace Canvases is a Dynatrace app for building custom, visual monitoring views. Instead of standard dashboards with fixed grid layouts, it lets you place live data tiles anywhere you want on top of a background of your choosing, turning things like an architecture diagram, network map, floor plan, or process flow into a live status board.>
+
+purpose: Display a dynamic, visual representation of your environment and its health, using live tiles that can be placed anywhere on a background of your choosing. Canvases is designed to be used in a variety of ways, from monitoring dashboards to status boards to custom visualizations.>
+
+author: "Taylor Williams"
+contact: "taylor.williams@dynatrace.com"
+asset_type: app
+use_case: log-analytics
+deployment: # select one or both
+  - SaaS
+tags:
+  - Logs
+  - Infrastructure
+  - BusinessObservablity
+setup_instructions: Standard Dynatrace app installation instructions apply. After installation, you can access the app from the Dynatrace menu. Search for "Canvases" to find the app. Once inside, you can create a new canvas or open an existing one. You can add tiles to your canvas by selecting the "Add Tile" button and choosing from a variety of tile types, including metrics, logs, and custom HTML. You can also customize the appearance of your canvas by changing the background image, adding text labels, and adjusting the layout of your tiles.>
+
+tenant_url: "https://dvq23986.apps.dynatrace.com/ui/apps/my.metrics.graphic.explorer/" # required except terraform — link to the asset running in a tenant
+related_assets: # optional
