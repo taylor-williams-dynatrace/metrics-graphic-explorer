@@ -1,9 +1,9 @@
 {
   "$schema": "./.dt-app/app.config.schema.json",
-  "environmentUrl": "https://ojj01074.apps.dynatrace.com/",
+  "environmentUrl": "https://<env_id>.apps.dynatrace.com/",
   "app": {
     "name": "Canvases",
-    "version": "0.2.2",
+    "version": "0.2.3",
     "description": "Live Dynatrace Data Visualization Engine for Fully Customized View Requirements",
     "id": "my.metrics.graphic.explorer",
     "icon": "ui/assets/app-icon.svg",
@@ -39,6 +39,10 @@
       {
         "name": "storage:spans:read",
         "comment": "read span data via DQL spans"
+      },
+      {
+        "name": "storage:entities:read",
+        "comment": "read entity data via DQL (dt.entity.* tables, e.g. dt.entity.service)"
       },
       {
         "name": "storage:buckets:read",

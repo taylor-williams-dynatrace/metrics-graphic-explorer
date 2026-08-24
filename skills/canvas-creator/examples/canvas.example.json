@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "name": "Production Host Health",
+  "backgroundImage": null,
+  "backgroundDocId": null,
+  "backgroundWidth": 1600,
+  "backgroundHeight": 900,
+  "tiles": [
+    {
+      "id": "tile-10c386bbc4",
+      "filters": [],
+      "label": "CPU usage",
+      "source": "metric",
+      "metricKey": "dt.host.cpu.usage",
+      "aggregation": "avg",
+      "lookback": "-15m",
+      "unit": "%",
+      "thresholds": [
+        {
+          "id": "th-912265b1f5",
+          "comparator": "gte",
+          "value": 90.0,
+          "color": "#c62239"
+        },
+        {
+          "id": "th-cdd8f16adf",
+          "comparator": "gte",
+          "value": 75.0,
+          "color": "#eea53c"
+        }
+      ],
+      "x": 40,
+      "y": 40,
+      "width": 491,
+      "height": 398
+    },
+    {
+      "id": "tile-c27ed4d57b",
+      "filters": [],
+      "label": "Memory usage",
+      "source": "metric",
+      "metricKey": "dt.host.memory.usage",
+      "aggregation": "avg",
+      "lookback": "-15m",
+      "unit": "%",
+      "thresholds": [
+        {
+          "id": "th-1e414c343c",
+          "comparator": "gte",
+          "value": 90.0,
+          "color": "#c62239"
+        }
+      ],
+      "x": 555,
+      "y": 40,
+      "width": 491,
+      "height": 398
+    },
+    {
+      "id": "tile-787311d8a3",
+      "filters": [],
+      "label": "Disk used",
+      "source": "dql",
+      "dql": "timeseries v = avg(dt.host.disk.usedPct, scalar:true), from:-15m",
+      "dqlDisplay": "value",
+      "unit": "%",
+      "x": 1069,
+      "y": 40,
+      "width": 491,
+      "height": 398
+    },
+    {
+      "id": "tile-61a6cecc1b",
+      "filters": [],
+      "label": "Top error hosts (15m)",
+      "source": "dql",
+      "dql": "fetch logs | filter loglevel == \"ERROR\" | summarize errors = count(), by:{host} | sort errors desc | limit 20",
+      "dqlDisplay": "table",
+      "tableColumns": [
+        "host",
+        "errors"
+      ],
+      "x": 40,
+      "y": 462,
+      "width": 1005,
+      "height": 398
+    },
+    {
+      "id": "tile-35c9e9c616",
+      "filters": [],
+      "label": "Inbound traffic (1h)",
+      "source": "metric",
+      "metricKey": "dt.host.net.nic.traffic.in",
+      "aggregation": "sum",
+      "lookback": "-1h",
+      "unit": "B",
+      "x": 1069,
+      "y": 462,
+      "width": 491,
+      "height": 398
+    }
+  ]
+}

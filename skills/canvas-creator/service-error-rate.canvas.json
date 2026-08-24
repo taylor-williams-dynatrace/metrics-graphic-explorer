@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "name": "Service Error Rates",
+  "backgroundImage": null,
+  "backgroundDocId": null,
+  "backgroundWidth": 1600,
+  "backgroundHeight": 900,
+  "tiles": [
+    {
+      "id": "tile-98964dede9",
+      "filters": [],
+      "label": "Active services (last 15m)",
+      "source": "dql",
+      "dql": "timeseries total = sum(dt.service.request.count, scalar:true), by:{dt.entity.service}, from:-15m | filter total > 0 | summarize service_count = count()",
+      "dqlDisplay": "value",
+      "x": 40,
+      "y": 40,
+      "width": 491,
+      "height": 398
+    },
+    {
+      "id": "tile-27a3392f70",
+      "filters": [],
+      "label": "Overall error rate (last 15m)",
+      "source": "dql",
+      "dql": "timeseries { total = sum(dt.service.request.count, scalar:true), failed = sum(dt.service.request.failure_count, scalar:true) }, from:-15m | fieldsAdd error_rate_pct = if(total > 0, (failed / total) * 100, else: 0) | fields error_rate_pct",
+      "dqlDisplay": "value",
+      "unit": "%",
+      "thresholds": [
+        {
+          "id": "th-f067366254",
+          "comparator": "gte",
+          "value": 5.0,
+          "color": "#c62239"
+        },
+        {
+          "id": "th-33f4a3ad5c",
+          "comparator": "gte",
+          "value": 1.0,
+          "color": "#d56b1a"
+        },
+        {
+          "id": "th-7b6372347d",
+          "comparator": "gte",
+          "value": 0.1,
+          "color": "#eea53c"
+        },
+        {
+          "id": "th-0bcea2f648",
+          "comparator": "gte",
+          "value": 0.0,
+          "color": "#2a7453"
+        }
+      ],
+      "x": 555,
+      "y": 40,
+      "width": 491,
+      "height": 398
+    },
+    {
+      "id": "tile-5ce013fc53",
+      "filters": [],
+      "label": "Failed requests (last 15m)",
+      "source": "dql",
+      "dql": "timeseries failed = sum(dt.service.request.failure_count, scalar:true), from:-15m | fields failed",
+      "dqlDisplay": "value",
+      "x": 1069,
+      "y": 40,
+      "width": 491,
+      "height": 398
+    },
+    {
+      "id": "tile-05825e980a",
+      "filters": [],
+      "label": "Error rate by service (last 15m)",
+      "source": "dql",
+      "dql": "timeseries { total = sum(dt.service.request.count), failed = sum(dt.service.request.failure_count) }, by:{dt.entity.service}, from:-15m | fieldsAdd requests = arraySum(total), failed_requests = arraySum(failed) | filter requests > 0 | fieldsAdd error_rate_pct = (failed_requests / requests) * 100 | fieldsAdd service = entityName(dt.entity.service) | fields service, requests, failed_requests, error_rate_pct | sort error_rate_pct desc, requests desc | limit 200",
+      "dqlDisplay": "table",
+      "tableColumns": [
+        "service",
+        "requests",
+        "failed_requests",
+        "error_rate_pct"
+      ],
+      "x": 40,
+      "y": 462,
+      "width": 1520,
+      "height": 398
+    }
+  ]
+}
