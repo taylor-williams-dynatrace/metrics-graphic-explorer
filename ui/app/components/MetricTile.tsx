@@ -1,9 +1,11 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useDql } from "@dynatrace-sdk/react-hooks";
 import { Flex } from "@dynatrace/strato-components/layouts";
 import { Text } from "@dynatrace/strato-components/typography";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { ProgressCircle, Markdown } from "@dynatrace/strato-components/content";
+import { DataTable } from "@dynatrace/strato-components-preview/tables";
+import type { DataTableColumnDef } from "@dynatrace/strato-components-preview/tables";
 import {
   DeleteIcon,
   EditIcon,
@@ -28,7 +30,10 @@ import {
   type ValuePosition,
 } from "../types/metricsView";
 import {
+  buildDqlRows,
   contrastTextColor,
+  discoverDqlFields,
+  type DqlTableRow,
   evaluateThresholdColor,
   extractScalar,
   formatValue,
@@ -100,6 +105,8 @@ export const MetricTile: React.FC<MetricTileProps> = ({
   const isDql = source === "dql";
   const isMarkdown = source === "markdown";
   const isShape = source === "shape";
+  // A DQL tile that renders its result as a full table rather than one value.
+  const isTableTile = isDql && (tile.dqlDisplay ?? "value") === "table";
   // Non-data tiles (markdown text, static shapes) never run a query.
   const isStatic = isMarkdown || isShape;
   const transparent = tile.transparent ?? false;
@@ -127,6 +134,21 @@ export const MetricTile: React.FC<MetricTileProps> = ({
     onLoadingChange?.(tile.id, isFetching);
     return () => onLoadingChange?.(tile.id, false);
   }, [isFetching, tile.id, onLoadingChange]);
+
+  // A transparent table shows only its gridlines and cell values over the
+  // canvas. The DataTable paints cell/row/header backgrounds from design
+  // tokens, so we clear them with a single scoped stylesheet (injected once).
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const id = "mce-transparent-table-style";
+    if (document.getElementById(id)) return;
+    const style = document.createElement("style");
+    style.id = id;
+    style.textContent =
+      ".mce-transparent-table, .mce-transparent-table * " +
+      "{ background-color: transparent !important; }";
+    document.head.appendChild(style);
+  }, []);
 
   // Metric tiles read the aliased `val`; DQL tiles read the single cell (which
   // may be numeric or text). Thresholds only apply to numeric values.
@@ -208,6 +230,66 @@ export const MetricTile: React.FC<MetricTileProps> = ({
   // In view mode a linked tile is clickable; in edit mode we only show the badge.
   const clickable = !editable && Boolean(link);
 
+  // Table-tile data: resolve the columns (explicit selection, else all returned
+  // fields) and normalize rows for the DataTable. Memoized so sorting state and
+  // renders stay stable between refreshes that return equivalent data.
+  const tableColumnKeys = useMemo(
+    () =>
+      tile.tableColumns && tile.tableColumns.length > 0
+        ? tile.tableColumns
+        : discoverDqlFields(
+            data?.records as Array<Record<string, unknown>> | undefined,
+          ),
+    [tile.tableColumns, data],
+  );
+  const tableRows = useMemo(
+    () =>
+      isTableTile
+        ? buildDqlRows(
+            data?.records as Array<Record<string, unknown>> | undefined,
+            tableColumnKeys,
+          )
+        : [],
+    [isTableTile, data, tableColumnKeys],
+  );
+  const tableColumns = useMemo<DataTableColumnDef<DqlTableRow>[]>(
+    () =>
+      tableColumnKeys.map((key) => ({
+        id: key,
+        header: key,
+        // Function accessor avoids dotted keys (e.g. "dt.entity.host") being
+        // treated as nested paths.
+        accessor: (row: DqlTableRow) => row[key],
+      })),
+    [tableColumnKeys],
+  );
+
+  // Keep the last successfully-built table so a refresh that transiently errors
+  // or returns no rows (a common blip for time-windowed queries) doesn't blank
+  // the tile — we keep showing the previous data until the next good result.
+  const lastGoodTableRef = useRef<{
+    rows: DqlTableRow[];
+    columns: DataTableColumnDef<DqlTableRow>[];
+  } | null>(null);
+  const hasFreshTable = tableRows.length > 0 && tableColumns.length > 0;
+  if (isTableTile && hasFreshTable) {
+    lastGoodTableRef.current = { rows: tableRows, columns: tableColumns };
+  }
+  // A settled, successful result that genuinely has no rows should clear the
+  // table; only in-flight or errored refreshes fall back to the last good data.
+  const settledEmpty =
+    !isFetching && !error && Array.isArray(data?.records) && !hasFreshTable;
+  const displayTable = hasFreshTable
+    ? { rows: tableRows, columns: tableColumns }
+    : settledEmpty
+      ? null
+      : lastGoodTableRef.current;
+
+  // The tile root; drags capture the pointer here so a drag started from the
+  // body (normal tiles) or the caption strip (table tiles) both route move/up
+  // events to the same element.
+  const rootRef = useRef<HTMLDivElement>(null);
+
   const dragState = useRef<{
     pointerId: number;
     startX: number;
@@ -237,7 +319,7 @@ export const MetricTile: React.FC<MetricTileProps> = ({
     const takeover =
       onHeaderPointerDown?.(tile.id, additive, e.clientX, e.clientY) ?? false;
     if (takeover) return;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    rootRef.current?.setPointerCapture(e.pointerId);
     dragState.current = {
       pointerId: e.pointerId,
       startX: e.clientX,
@@ -332,9 +414,14 @@ export const MetricTile: React.FC<MetricTileProps> = ({
 
   return (
     <div
+      ref={rootRef}
       onClick={clickable && link ? () => openTileLink(link) : undefined}
       title={clickable ? "Open link in a new tab" : undefined}
-      onPointerDown={editable ? onDragPointerDown : undefined}
+      // Table tiles keep their body interactive (sort/scroll); they drag from
+      // the caption strip instead, so no body pointer-down handler here.
+      onPointerDown={
+        editable && !isTableTile ? onDragPointerDown : undefined
+      }
       onPointerMove={editable ? onDragPointerMove : undefined}
       onPointerUp={editable ? endDrag : undefined}
       onPointerCancel={editable ? endDrag : undefined}
@@ -355,10 +442,14 @@ export const MetricTile: React.FC<MetricTileProps> = ({
         flexDirection: "column",
         userSelect: "none",
         touchAction: "none",
-        cursor: clickable ? "pointer" : editable ? "grab" : undefined,
+        cursor: clickable
+          ? "pointer"
+          : editable && !isTableTile
+            ? "grab"
+            : undefined,
       }}
     >
-      {transparent ? null : lineShape ? (
+      {transparent || isTableTile ? null : lineShape ? (
         <TileLineLayer
           width={tile.width}
           height={tile.height}
@@ -405,7 +496,7 @@ export const MetricTile: React.FC<MetricTileProps> = ({
           <LinkIcon />
         </div>
       )}
-      {editable && selected && (
+      {!isTableTile && editable && selected && (
         <Flex
           justifyContent="space-between"
           alignItems="center"
@@ -461,7 +552,158 @@ export const MetricTile: React.FC<MetricTileProps> = ({
         </Flex>
       )}
 
-      {isMarkdown ? (
+      {isTableTile ? (
+        <div
+          style={{
+            position: "relative",
+            zIndex: 1,
+            flexGrow: 1,
+            minHeight: 0,
+            width: "100%",
+            boxSizing: "border-box",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            borderRadius: 4,
+            // Transparent tables drop the surface block/border so only the
+            // gridlines and values sit over the canvas; edit mode keeps a faint
+            // outline so the tile is still discoverable.
+            border: transparent
+              ? editable
+                ? `1px dashed ${Colors.Border.Neutral.Default}`
+                : "none"
+              : `1px solid ${
+                  editable
+                    ? Colors.Border.Primary.Default
+                    : Colors.Border.Neutral.Default
+                }`,
+            background: transparent
+              ? "transparent"
+              : Colors.Background.Surface.Default,
+          }}
+        >
+          {(editable || label) && (
+            <Flex
+              alignItems="center"
+              justifyContent="space-between"
+              gap={4}
+              onPointerDown={editable ? onDragPointerDown : undefined}
+              style={{
+                flex: "0 0 auto",
+                padding: "3px 6px",
+                cursor: editable ? "grab" : "default",
+                borderBottom:
+                  transparent && !editable
+                    ? "none"
+                    : `1px solid ${Colors.Border.Neutral.Default}`,
+                background:
+                  transparent
+                    ? editable
+                      ? "rgba(127,127,127,0.18)"
+                      : "transparent"
+                    : Colors.Background.Container.Neutral.Default,
+              }}
+            >
+              <Flex alignItems="center" gap={4} style={{ minWidth: 0 }}>
+                {editable && <DragAllDirectionIcon />}
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    color: Colors.Text.Neutral.Default,
+                  }}
+                >
+                  {label || (editable ? "Table" : "")}
+                </Text>
+              </Flex>
+              {editable && selected && (
+                <Flex gap={0} onPointerDown={(e) => e.stopPropagation()}>
+                  <Button
+                    variant="default"
+                    onClick={() => onEdit(tile)}
+                    aria-label="Edit tile"
+                    style={{ minWidth: "auto", padding: 2 }}
+                  >
+                    <Button.Prefix>
+                      <EditIcon />
+                    </Button.Prefix>
+                  </Button>
+                  <Button
+                    variant="default"
+                    onClick={() => onDuplicate(tile)}
+                    aria-label="Duplicate tile"
+                    style={{ minWidth: "auto", padding: 2 }}
+                  >
+                    <Button.Prefix>
+                      <DuplicateIcon />
+                    </Button.Prefix>
+                  </Button>
+                  <Button
+                    variant="default"
+                    onClick={() => onRemove(tile.id)}
+                    aria-label="Remove tile"
+                    style={{ minWidth: "auto", padding: 2 }}
+                  >
+                    <Button.Prefix>
+                      <DeleteIcon />
+                    </Button.Prefix>
+                  </Button>
+                </Flex>
+              )}
+            </Flex>
+          )}
+          <div
+            className={transparent ? "mce-transparent-table" : undefined}
+            style={{ flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: 4 }}
+          >
+            {displayTable ? (
+              // Once we have data, keep showing it across refreshes even if a
+              // given refresh is still in-flight, errored, or returned nothing.
+              <DataTable
+                data={displayTable.rows}
+                columns={displayTable.columns}
+                sortable
+                resizable
+                fullWidth
+                // Transparent tables show a full gridline grid (no surface
+                // block) so the cells read clearly over the canvas.
+                variant={
+                  transparent
+                    ? { verticalDividers: true, contained: false }
+                    : undefined
+                }
+              />
+            ) : isLoading || isFetching ? (
+              <Flex justifyContent="center" style={{ padding: 12 }}>
+                <ProgressCircle size="small" aria-label="Loading table" />
+              </Flex>
+            ) : error ? (
+              <Text
+                style={{
+                  color: Colors.Text.Critical.Default,
+                  fontSize: 12,
+                  padding: 8,
+                }}
+              >
+                Query error
+              </Text>
+            ) : (
+              <Text
+                style={{
+                  color: Colors.Text.Neutral.Subdued,
+                  fontSize: 12,
+                  padding: 8,
+                }}
+              >
+                No data
+              </Text>
+            )}
+          </div>
+        </div>
+      ) : isMarkdown ? (
         <div
           style={{
             position: "relative",

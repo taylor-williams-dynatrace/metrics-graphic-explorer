@@ -188,6 +188,85 @@ export function validateDqlResult(r: DqlCellResult): {
 }
 
 /**
+ * Discover the field keys present across a DQL result, preserving first-seen
+ * order. Used to offer table columns and to fall back to "all fields".
+ */
+export function discoverDqlFields(
+  records: Array<Record<string, unknown>> | undefined,
+): string[] {
+  if (!records || records.length === 0) return [];
+  const seen = new Set<string>();
+  const order: string[] = [];
+  for (const rec of records) {
+    for (const key of Object.keys(rec)) {
+      if (!seen.has(key)) {
+        seen.add(key);
+        order.push(key);
+      }
+    }
+  }
+  return order;
+}
+
+/**
+ * Normalize an arbitrary DQL cell into something a table can render/sort:
+ * numbers and strings pass through; booleans/bigints stringify; arrays and
+ * objects become compact JSON; null/undefined become null (shown as empty).
+ */
+export function normalizeCell(value: unknown): number | string | null {
+  if (value == null) return null;
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return value;
+  if (typeof value === "boolean" || typeof value === "bigint")
+    return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    // Non-serializable (e.g. circular) — show a placeholder rather than throw.
+    return "[object]";
+  }
+}
+
+/** A table row keyed by column field, with normalized cell values. */
+export type DqlTableRow = Record<string, number | string | null>;
+
+/**
+ * Build normalized table rows from a DQL result, limited to the given columns
+ * (in order). Falls back to all discovered fields when no columns are given.
+ */
+export function buildDqlRows(
+  records: Array<Record<string, unknown>> | undefined,
+  columns: string[],
+): DqlTableRow[] {
+  if (!records || records.length === 0) return [];
+  const cols = columns.length > 0 ? columns : discoverDqlFields(records);
+  return records.map((rec) => {
+    const row: DqlTableRow = {};
+    for (const col of cols) row[col] = normalizeCell(rec[col]);
+    return row;
+  });
+}
+
+/** Validate that a DQL result is usable as a table (at least one row). */
+export function validateDqlTable(
+  records: Array<Record<string, unknown>> | undefined,
+): { ok: boolean; message: string; fields: string[] } {
+  const fields = discoverDqlFields(records);
+  const rows = records?.length ?? 0;
+  if (rows === 0)
+    return { ok: false, message: "Query returned no rows.", fields };
+  if (fields.length === 0)
+    return { ok: false, message: "Query returned no columns.", fields };
+  return {
+    ok: true,
+    message: `Returns ${rows} row${rows === 1 ? "" : "s"} × ${fields.length} column${
+      fields.length === 1 ? "" : "s"
+    }.`,
+    fields,
+  };
+}
+
+/**
  * Resolve the threshold color for a value. Rules are evaluated in list order
  * and the first satisfied rule wins. Returns null when nothing matches.
  */

@@ -19,9 +19,15 @@ Built with React + TypeScript and the Strato Design System.
     environment (discovered via the DQL `metrics` command). Pick a metric, an
     aggregation (avg / sum / min / max / count), an aggregation window
     (5 min / 15 min / 1 hour), and optional dimension filters.
-  - **Create via DQL** — write and test a custom DQL query. The validator
-    requires the query to return exactly one value (a single numeric or text
-    value — no tables, series, or multiple fields) before the tile can be added.
+  - **Create via DQL** — write and test a custom DQL query, then choose how to
+    display it:
+    - **Single value** — the validator requires the query to return exactly one
+      value (numeric or text) before the tile can be added.
+    - **Table** — the query can return many rows and columns; after testing,
+      a column picker lets you choose and reorder which returned fields appear.
+      The result renders as an interactive Strato **DataTable** (sortable,
+      resizable, scrollable) that can optionally be made transparent to show only
+      gridlines and values over the canvas.
   - **Markdown** — a free-form text tile authored in markdown (headings, bold,
     lists, links, etc.), for titles, notes, and legends.
   - **Shape** — a purely decorative shape with no data behind it.
@@ -32,10 +38,12 @@ Built with React + TypeScript and the Strato Design System.
 
 - **View mode (`/view/:id`)** — the editor chrome disappears and each tile's
   value refreshes every 30 s. Metric tiles run a scalar `timeseries` query
-  (`<agg>(metric, scalar:true)`); DQL tiles run the user's query and read its
-  single value (numeric or text). Tiles recolor based on their thresholds
-  (numeric values only), and a linked tile opens its destination in a new tab.
-  Click **Edit** to return to the workshop (owner only).
+  (`<agg>(metric, scalar:true)`); DQL tiles run the user's query and either read
+  its single value (numeric or text) or render its rows as a table. Tiles recolor
+  based on their thresholds (numeric values only), and a linked tile opens its
+  destination in a new tab. Table tiles keep showing the last good result through
+  a transient failed/empty refresh instead of blanking. Click **Edit** to return
+  to the workshop (owner only).
 
 ### Tile appearance
 
@@ -51,6 +59,18 @@ Built with React + TypeScript and the Strato Design System.
 - **Background** — default surface, a custom fill color, or fully transparent
   (text only, no shape).
 - **Rotation** — any angle (with 0 / 90 / 180 / 270 presets).
+
+### Table tiles
+
+A DQL tile set to **Table** renders as a plain surface with an optional title
+caption and an embedded, interactive DataTable. Because the table body stays
+clickable (sorting, scrolling), table tiles are dragged and selected from their
+title/caption strip rather than the body. Columns are whatever you selected in
+the column picker (falling back to all returned fields), and cell values are
+normalized so numbers sort numerically and arrays/objects show as compact JSON.
+A **Transparent background** option removes the surface block and cell fills,
+leaving just the gridlines and values over the canvas — the same idea as the
+transparent shape/value tiles.
 
 ### Canvas interactions
 
@@ -78,8 +98,9 @@ canvas.
   8 MB.
 - Each tile stores its value source: a metric tile keeps `metricKey`,
   `aggregation`, `lookback`, and `filters`; a DQL tile keeps its custom `dql`
-  string; markdown and shape tiles keep their content/appearance only. Tile
-  values are always read live from Grail — no values are persisted.
+  string plus its `dqlDisplay` (`value` or `table`) and, for tables, the ordered
+  `tableColumns`; markdown and shape tiles keep their content/appearance only.
+  Tile values are always read live from Grail — no values are persisted.
 
 ### Source layout
 
@@ -88,10 +109,11 @@ canvas.
   image-to-data-URL embedding.
 - `ui/app/services/shareService.ts` — direct-share management (users/groups).
 - `ui/app/services/metricsQuery.ts` — DQL builders, DQL single-value
-  extraction/validation, threshold evaluation, and value formatting.
+  extraction/validation, table field discovery + row normalization, threshold
+  evaluation, and value formatting.
 - `ui/app/components/` — `GlassCanvas`, `MetricTile`, `TileShapeLayer`,
-  `MetricExplorer`, `TileConfigForm`, `FilterRow`, `ThresholdRow`,
-  `CreateViewModal`, `ShareDialog`, `NativeField`, `SelectField`,
+  `MetricExplorer`, `TileConfigForm`, `ColumnPicker`, `FilterRow`,
+  `ThresholdRow`, `CreateViewModal`, `ShareDialog`, `NativeField`, `SelectField`,
   `MultiSelectField`, `ConfigSection`.
 - `ui/app/pages/` — `ViewLibrary`, `ViewPage`.
 

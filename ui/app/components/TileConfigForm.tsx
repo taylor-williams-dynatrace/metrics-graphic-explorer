@@ -11,9 +11,11 @@ import Colors from "@dynatrace/strato-design-tokens/colors";
 import type { DocumentMetaData } from "@dynatrace-sdk/client-document";
 import {
   AGGREGATIONS,
+  DEFAULT_DQL_DISPLAY,
   DEFAULT_LOOKBACK,
   DEFAULT_TILE_SHAPE,
   DEFAULT_VALUE_POSITION,
+  DQL_DISPLAY_OPTIONS,
   generateId,
   isLineTileShape,
   isOutlineTileShape,
@@ -24,6 +26,7 @@ import {
   TILE_SHAPES,
   VALUE_POSITION_OPTIONS,
   type AggregationType,
+  type DqlDisplay,
   type LineArrows,
   type LookbackWindow,
   type Threshold,
@@ -38,8 +41,10 @@ import {
   dimensionProbeQuery,
   readDqlCell,
   validateDqlResult,
+  validateDqlTable,
 } from "../services/metricsQuery";
 import { listViews } from "../services/documentService";
+import { ColumnPicker } from "./ColumnPicker";
 import { ConfigSection } from "./ConfigSection";
 import { FilterRow } from "./FilterRow";
 import { ThresholdRow } from "./ThresholdRow";
@@ -53,6 +58,8 @@ export interface TileConfig {
   aggregation?: AggregationType;
   lookback?: LookbackWindow;
   dql?: string;
+  dqlDisplay?: DqlDisplay;
+  tableColumns?: string[];
   markdown?: string;
   shape: TileShape;
   rotation?: number;
@@ -148,6 +155,18 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
     initial?.lookback ?? DEFAULT_LOOKBACK,
   );
   const [dql, setDql] = useState<string>(initial?.dql ?? "");
+  const [dqlDisplay, setDqlDisplay] = useState<DqlDisplay>(
+    initial?.dqlDisplay ?? DEFAULT_DQL_DISPLAY,
+  );
+  const [tableColumns, setTableColumns] = useState<string[]>(
+    initial?.tableColumns ?? [],
+  );
+  // Fields discovered from the last successful table test — the pool the column
+  // picker chooses from. Seeded with any saved columns so the picker isn't empty
+  // before the auto-test finishes when editing an existing table tile.
+  const [tableFields, setTableFields] = useState<string[]>(
+    initial?.tableColumns ?? [],
+  );
   const [markdown, setMarkdown] = useState<string>(initial?.markdown ?? "");
   const [test, setTest] = useState<TestState>({ status: "idle", message: "" });
   const [shape, setShape] = useState<TileShape>(
@@ -179,6 +198,11 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
   );
   const [bgColor, setBgColor] = useState<string>(
     initial?.backgroundColor ?? "#134fc9",
+  );
+  // Table tiles reuse the tile `transparent` flag as a "show only gridlines &
+  // values" toggle (no solid table block behind the cells).
+  const [tableTransparent, setTableTransparent] = useState<boolean>(
+    initial?.transparent ?? false,
   );
   const [filters, setFilters] = useState<TileFilter[]>(initial?.filters ?? []);
   const [thresholds, setThresholds] = useState<Threshold[]>(
@@ -231,12 +255,30 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
     setTest({ status: "running", message: "Running query…" });
     try {
       const result = await dqlTest.refetch();
-      const cell = readDqlCell(result.data?.records);
-      const validation = validateDqlResult(cell);
-      setTest({
-        status: validation.ok ? "ok" : "error",
-        message: validation.message,
-      });
+      const records = result.data?.records as
+        | Array<Record<string, unknown>>
+        | undefined;
+      if (dqlDisplay === "table") {
+        const validation = validateDqlTable(records);
+        setTableFields(validation.fields);
+        // Default to all fields on first successful test; otherwise keep the
+        // user's selection, dropping any columns the query no longer returns.
+        setTableColumns((prev) => {
+          const kept = prev.filter((c) => validation.fields.includes(c));
+          return kept.length > 0 ? kept : validation.fields;
+        });
+        setTest({
+          status: validation.ok ? "ok" : "error",
+          message: validation.message,
+        });
+      } else {
+        const cell = readDqlCell(records);
+        const validation = validateDqlResult(cell);
+        setTest({
+          status: validation.ok ? "ok" : "error",
+          message: validation.message,
+        });
+      }
     } catch (e) {
       setTest({
         status: "error",
@@ -298,12 +340,13 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
   }
 
   const isMetric = source === "metric";
+  const isTable = isDql && dqlDisplay === "table";
   const canSubmit = isShape
     ? true
     : isMarkdown
       ? markdown.trim().length > 0
       : isDql
-        ? test.status === "ok"
+        ? test.status === "ok" && (!isTable || tableColumns.length > 0)
         : Boolean(metricKey);
 
   function handleSubmit() {
@@ -313,28 +356,36 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
       aggregation: isMetric ? aggregation : undefined,
       lookback: isMetric ? lookback : undefined,
       dql: isDql ? dql.trim() : undefined,
+      dqlDisplay: isDql ? dqlDisplay : undefined,
+      tableColumns: isTable ? tableColumns : undefined,
       markdown: isMarkdown ? markdown : undefined,
-      // Markdown tiles are a plain text box, not a shape.
-      shape: isMarkdown ? DEFAULT_TILE_SHAPE : shape,
-      rotation: rotation || undefined,
-      lineWeight: isLineTileShape(shape) ? lineWeight : undefined,
-      lineDashed: isLineTileShape(shape) ? lineDashed : undefined,
-      lineArrows: isLineTileShape(shape) ? lineArrows : undefined,
-      shapeOnly: isMarkdown || isShape ? false : shapeOnly,
-      transparent: bgMode === "transparent",
-      backgroundColor: bgMode === "custom" ? bgColor : undefined,
+      // Markdown tiles are a plain text box, not a shape. Table tiles are a
+      // plain surface, so they ignore shape/threshold/value styling entirely.
+      shape: isMarkdown || isTable ? DEFAULT_TILE_SHAPE : shape,
+      rotation: isTable ? undefined : rotation || undefined,
+      lineWeight:
+        !isTable && isLineTileShape(shape) ? lineWeight : undefined,
+      lineDashed:
+        !isTable && isLineTileShape(shape) ? lineDashed : undefined,
+      lineArrows:
+        !isTable && isLineTileShape(shape) ? lineArrows : undefined,
+      shapeOnly: isMarkdown || isShape || isTable ? false : shapeOnly,
+      transparent: isTable ? tableTransparent : bgMode === "transparent",
+      backgroundColor:
+        !isTable && bgMode === "custom" ? bgColor : undefined,
       valuePosition:
-        isMarkdown || isShape ? undefined : valuePosition,
+        isMarkdown || isShape || isTable ? undefined : valuePosition,
       filters: isMetric
         ? filters.filter((f) => f.dimension && f.value !== "")
         : [],
       thresholds:
-        isMarkdown || isShape
+        isMarkdown || isShape || isTable
           ? []
           : thresholds.filter((t) => Number.isFinite(t.value)),
       label: isMarkdown || isShape ? undefined : label.trim() || undefined,
-      unit: isMarkdown || isShape ? undefined : unit.trim() || undefined,
-      link: resolveLink(),
+      unit:
+        isMarkdown || isShape || isTable ? undefined : unit.trim() || undefined,
+      link: isTable ? undefined : resolveLink(),
     });
   }
 
@@ -374,10 +425,29 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
         </Flex>
       ) : isDql ? (
         <Flex flexDirection="column" gap={6}>
+          <Flex flexDirection="column" gap={4}>
+            <Text style={fieldLabelStyle}>Display as</Text>
+            <div style={{ maxWidth: 220 }}>
+              <SelectField
+                value={dqlDisplay}
+                ariaLabel="Display as"
+                onChange={(v) => {
+                  setDqlDisplay(v as DqlDisplay);
+                  // Switching mode changes what "valid" means; re-test.
+                  setTest({ status: "idle", message: "" });
+                }}
+                options={DQL_DISPLAY_OPTIONS}
+              />
+            </div>
+          </Flex>
           <Text style={fieldLabelStyle}>Custom DQL query</Text>
           <DQLEditor
             value={dql}
-            placeholder="timeseries v = avg(dt.host.cpu.usage, scalar:true)"
+            placeholder={
+              isTable
+                ? "fetch logs | fields timestamp, status, content | limit 100"
+                : "timeseries v = avg(dt.host.cpu.usage, scalar:true)"
+            }
             onChange={(v) => {
               setDql(v);
               setTest({ status: "idle", message: "" });
@@ -397,13 +467,42 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
               }}
             >
               {test.message ||
-                "Query must return a single numeric or text value."}
+                (isTable
+                  ? "Query should return one or more rows."
+                  : "Query must return a single numeric or text value.")}
             </Text>
             <RunQueryButton
               onClick={() => void runDqlTest()}
               queryState={dqlQueryState}
             />
           </Flex>
+          {isTable && (
+            <ColumnPicker
+              fields={tableFields}
+              value={tableColumns}
+              onChange={setTableColumns}
+            />
+          )}
+          {isTable && (
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 12,
+                fontWeight: 500,
+                color: Colors.Text.Neutral.Default,
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={tableTransparent}
+                onChange={(e) => setTableTransparent(e.target.checked)}
+              />
+              Transparent background (show only gridlines &amp; values)
+            </label>
+          )}
         </Flex>
       ) : (
         <>
@@ -475,6 +574,7 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
       </ConfigSection>
       )}
 
+      {!isTable && (
       <ConfigSection title="Appearance">
       {!isMarkdown && (
       <Flex flexDirection="column" gap={6}>
@@ -690,8 +790,9 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
         </Flex>
       </Flex>
       </ConfigSection>
+      )}
 
-      {!isMarkdown && !isShape && (
+      {!isMarkdown && !isShape && !isTable && (
         <ConfigSection title="Color thresholds" defaultOpen={false}>
           <Flex justifyContent="flex-end" alignItems="center">
             <Button variant="default" onClick={addThreshold}>
@@ -737,16 +838,19 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
       )}
 
       {!isMarkdown && !isShape && (
-        <ConfigSection title="Label & unit">
+        <ConfigSection title={isTable ? "Label" : "Label & unit"}>
         <Flex gap={8}>
         <Flex flexDirection="column" gap={4} style={{ flex: 1 }}>
-          <Text style={fieldLabelStyle}>Label (optional)</Text>
+          <Text style={fieldLabelStyle}>
+            {isTable ? "Title (optional)" : "Label (optional)"}
+          </Text>
           <NativeInput
             value={label}
-            placeholder={metricKey ?? "Custom DQL"}
+            placeholder={isTable ? "Shown above the table" : metricKey ?? "Custom DQL"}
             onChange={(e) => setLabel(e.target.value)}
           />
         </Flex>
+        {!isTable && (
         <Flex flexDirection="column" gap={4} style={{ width: 90 }}>
           <Text style={fieldLabelStyle}>Unit</Text>
           <NativeInput
@@ -755,10 +859,12 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
             onChange={(e) => setUnit(e.target.value)}
           />
         </Flex>
+        )}
       </Flex>
         </ConfigSection>
       )}
 
+      {!isTable && (
       <ConfigSection title="Hyperlink" defaultOpen={false}>
         <SelectField
           value={linkChoice}
@@ -806,6 +912,7 @@ export const TileConfigForm: React.FC<TileConfigFormProps> = ({
           new tab when clicked in view mode.
         </Text>
       </ConfigSection>
+      )}
 
       <Flex gap={8} justifyContent="flex-end">
         {onCancel && (

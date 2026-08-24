@@ -179,6 +179,8 @@ export const ViewPage: React.FC = () => {
       aggregation: config.aggregation,
       lookback: config.lookback,
       dql: config.dql,
+      dqlDisplay: config.dqlDisplay,
+      tableColumns: config.tableColumns,
       markdown: config.markdown,
       shape: config.shape,
       rotation: config.rotation,
@@ -196,8 +198,9 @@ export const ViewPage: React.FC = () => {
       link: config.link,
       x: 24,
       y: 24,
-      width: DEFAULT_TILE_SIZE,
-      height: DEFAULT_TILE_SIZE,
+      // Tables need more room than a value tile, so start larger.
+      width: config.dqlDisplay === "table" ? 420 : DEFAULT_TILE_SIZE,
+      height: config.dqlDisplay === "table" ? 240 : DEFAULT_TILE_SIZE,
     };
     mutateView((v) => ({ ...v, tiles: [...v.tiles, tile] }));
   }
@@ -231,6 +234,8 @@ export const ViewPage: React.FC = () => {
               aggregation: config.aggregation,
               lookback: config.lookback,
               dql: config.dql,
+              dqlDisplay: config.dqlDisplay,
+              tableColumns: config.tableColumns,
               markdown: config.markdown,
               shape: config.shape,
               rotation: config.rotation,
@@ -672,6 +677,8 @@ export const ViewPage: React.FC = () => {
               aggregation: editingTile.aggregation,
               lookback: editingTile.lookback,
               dql: editingTile.dql,
+              dqlDisplay: editingTile.dqlDisplay,
+              tableColumns: editingTile.tableColumns,
               markdown: editingTile.markdown,
               shape: editingTile.shape,
               rotation: editingTile.rotation,

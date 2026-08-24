@@ -19,6 +19,19 @@ export const VIEW_SCHEMA_VERSION = 1 as const;
 /** Aggregation applied to a metric when computing the tile's single value. */
 export type AggregationType = "avg" | "sum" | "min" | "max" | "count";
 
+/**
+ * How a DQL tile renders its result: a single scalar value (the default) or a
+ * full table built from the query's returned rows and selected columns.
+ */
+export type DqlDisplay = "value" | "table";
+
+export const DQL_DISPLAY_OPTIONS: { value: DqlDisplay; label: string }[] = [
+  { value: "value", label: "Single value" },
+  { value: "table", label: "Table" },
+];
+
+export const DEFAULT_DQL_DISPLAY: DqlDisplay = "value";
+
 /** Visual shape of a metric tile. */
 export type TileShape =
   | "rectangle"
@@ -210,8 +223,15 @@ export interface MetricTile {
   metricKey?: string;
   /** Aggregation used to compute the displayed value (metric source). */
   aggregation?: AggregationType;
-  /** Custom DQL query returning a single value. Used when source is "dql". */
+  /** Custom DQL query. Used when source is "dql". */
   dql?: string;
+  /** How a DQL tile renders its result: single value (default) or table. */
+  dqlDisplay?: DqlDisplay;
+  /**
+   * Ordered list of result field keys to show as columns (DQL table display).
+   * Empty/undefined falls back to every field the query returns.
+   */
+  tableColumns?: string[];
   /** Markdown text content. Used when source is "markdown". */
   markdown?: string;
   /** Visual shape of the tile (defaults to rectangle). */
